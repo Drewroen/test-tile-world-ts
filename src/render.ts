@@ -123,7 +123,7 @@ export function drawCreatureOverlay(
     if (cr.hidden) continue;
     const col = (cr.pos % GRID) - viewport.x0;
     const row = Math.floor(cr.pos / GRID) - viewport.y0;
-    if (col < 0 || col >= viewport.width || row < 0 || row >= viewport.height) continue;
+    if (col < -1 || col > viewport.width || row < -1 || row > viewport.height) continue;
 
     // pos is already the destination tile once a move starts; moving
     // counts down from 8 to 0 (eighths of a tile) as the creature eases
@@ -131,7 +131,7 @@ export function drawCreatureOverlay(
     // travel and slides forward as moving shrinks.
     let x = col * cellSize - offX;
     let y = row * cellSize - offY;
-    const moveOffset = (cr.moving * cellSize) / 8;
+    const moveOffset = (cr.moving * cellSize) / EIGHTHS_PER_TILE;
     switch (cr.dir) {
       case NORTH: y += moveOffset; break;
       case WEST: x += moveOffset; break;

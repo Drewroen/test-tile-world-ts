@@ -45,6 +45,8 @@ const bootIconCtxs = [0, 1, 2, 3].map(
 for (const ctx of [...keyIconCtxs, ...bootIconCtxs]) {
   ctx.imageSmoothingEnabled = false;
 }
+const prevKeysDrawn: boolean[] = [false, false, false, false];
+const prevBootsDrawn: boolean[] = [false, false, false, false];
 
 let levels: GameSetup[] = [];
 let game: Game | null = null;
@@ -187,10 +189,18 @@ function render(): void {
     : Infinity;
   timeLeftEl.textContent = state.timelimit ? String(secondsLeft) : "∞";
   for (let n = 0; n < 4; n++) {
-    keyIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
-    drawTile(keyIconCtxs[n]!, tileset, state.keys[n] ? KEY_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
-    bootIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
-    drawTile(bootIconCtxs[n]!, tileset, state.boots[n] ? BOOT_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
+    const hasKey = Boolean(state.keys[n]);
+    if (hasKey !== prevKeysDrawn[n]) {
+      keyIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+      drawTile(keyIconCtxs[n]!, tileset, hasKey ? KEY_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
+      prevKeysDrawn[n] = hasKey;
+    }
+    const hasBoot = Boolean(state.boots[n]);
+    if (hasBoot !== prevBootsDrawn[n]) {
+      bootIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+      drawTile(bootIconCtxs[n]!, tileset, hasBoot ? BOOT_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
+      prevBootsDrawn[n] = hasBoot;
+    }
   }
 }
 
