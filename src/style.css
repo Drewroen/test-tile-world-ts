@@ -1,0 +1,74 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+#app {
+  max-width: 720px;
+  width: 100%;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  opacity: 0.75;
+  margin-top: 0;
+  font-size: 0.9rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+}
+
+.game-area {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+canvas {
+  border: 2px solid currentColor;
+  image-rendering: pixelated;
+  background: #888;
+}
+
+.hud {
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+}
+
+.status {
+  font-weight: bold;
+  min-height: 1.4em;
+}
+
+.status.win {
+  color: #2e7d32;
+}
+
+.status.lose {
+  color: #c62828;
+}
+
+.hint {
+  opacity: 0.7;
+  font-size: 0.8rem;
+}
