@@ -58,9 +58,44 @@ window.addEventListener("keyup", (e) => {
   if (dir !== undefined) heldDirs.delete(dir);
 });
 
+// Mobile touch controls: the board is divided into four triangular zones
+// by its two diagonals (like a D-pad), so tapping/holding near the top,
+// bottom, left, or right edge of the canvas moves in that direction.
+// Multiple simultaneous touches are tracked by identifier so each one can
+// be released independently.
+const touchDirs = new Map<number, number>();
+
+function directionForTouch(touch: Touch): number {
+  const rect = canvas.getBoundingClientRect();
+  const dx = touch.clientX - (rect.left + rect.width / 2);
+  const dy = touch.clientY - (rect.top + rect.height / 2);
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? EAST : WEST;
+  }
+  return dy > 0 ? SOUTH : NORTH;
+}
+
+function handleTouchStartOrMove(e: TouchEvent): void {
+  e.preventDefault();
+  for (const touch of Array.from(e.changedTouches)) {
+    touchDirs.set(touch.identifier, directionForTouch(touch));
+  }
+}
+function handleTouchEnd(e: TouchEvent): void {
+  e.preventDefault();
+  for (const touch of Array.from(e.changedTouches)) {
+    touchDirs.delete(touch.identifier);
+  }
+}
+canvas.addEventListener("touchstart", handleTouchStartOrMove, { passive: false });
+canvas.addEventListener("touchmove", handleTouchStartOrMove, { passive: false });
+canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+
 function currentInputCommand(): number {
   let dir = NIL;
   for (const d of heldDirs) dir |= d;
+  for (const d of touchDirs.values()) dir |= d;
   return dir;
 }
 
@@ -78,6 +113,7 @@ function startLevel(index: number): void {
     tickHandle = undefined;
   }
   heldDirs.clear();
+  touchDirs.clear();
   statusEl.textContent = "";
   statusEl.className = "status";
 

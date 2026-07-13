@@ -45,6 +45,7 @@ canvas {
   border: 2px solid currentColor;
   image-rendering: pixelated;
   background: #888;
+  touch-action: none;
 }
 
 .hud {
