@@ -2,6 +2,7 @@ import {
   Game,
   splitDatFile,
   Ruleset,
+  Tile,
   NIL,
   NORTH,
   WEST,
@@ -10,7 +11,7 @@ import {
   type GameSetup,
 } from "tworld-engine";
 import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
-import { loadTileset, type Tileset } from "./tileset";
+import { loadTileset, drawTile, type Tileset } from "./tileset";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -27,11 +28,23 @@ const rulesetSelect = document.querySelector<HTMLSelectElement>("#ruleset-select
 const viewportSelect = document.querySelector<HTMLSelectElement>("#viewport-select")!;
 const restartBtn = document.querySelector<HTMLButtonElement>("#restart-btn")!;
 const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
+const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
 const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
-const keysEl = document.querySelector<HTMLElement>("#keys")!;
-const bootsEl = document.querySelector<HTMLElement>("#boots")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
+
+const ICON_SIZE = 24;
+const KEY_TILES = [Tile.Key_Red, Tile.Key_Blue, Tile.Key_Yellow, Tile.Key_Green];
+const BOOT_TILES = [Tile.Boots_Ice, Tile.Boots_Slide, Tile.Boots_Fire, Tile.Boots_Water];
+const keyIconCtxs = [0, 1, 2, 3].map(
+  (n) => document.querySelector<HTMLCanvasElement>(`#key-${n}`)!.getContext("2d")!,
+);
+const bootIconCtxs = [0, 1, 2, 3].map(
+  (n) => document.querySelector<HTMLCanvasElement>(`#boot-${n}`)!.getContext("2d")!,
+);
+for (const ctx of [...keyIconCtxs, ...bootIconCtxs]) {
+  ctx.imageSmoothingEnabled = false;
+}
 
 let levels: GameSetup[] = [];
 let game: Game | null = null;
@@ -121,6 +134,7 @@ function startLevel(index: number): void {
   if (!setup) return;
   game = new Game(setup, currentRuleset());
   levelNameEl.textContent = `#${setup.number} ${setup.name || "(untitled)"}`;
+  levelPasswordEl.textContent = setup.passwd ? `Password: ${setup.passwd}` : "";
 
   tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
   render();
@@ -172,8 +186,12 @@ function render(): void {
     ? Math.max(0, Math.ceil((state.timelimit - state.currenttime) / TICKS_PER_SECOND))
     : Infinity;
   timeLeftEl.textContent = state.timelimit ? String(secondsLeft) : "∞";
-  keysEl.textContent = `R:${state.keys[0]} B:${state.keys[1]} Y:${state.keys[2]} G:${state.keys[3]}`;
-  bootsEl.textContent = `Ice:${state.boots[0]} Slide:${state.boots[1]} Fire:${state.boots[2]} Water:${state.boots[3]}`;
+  for (let n = 0; n < 4; n++) {
+    keyIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+    drawTile(keyIconCtxs[n]!, tileset, state.keys[n] ? KEY_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
+    bootIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+    drawTile(bootIconCtxs[n]!, tileset, state.boots[n] ? BOOT_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
+  }
 }
 
 async function main(): Promise<void> {

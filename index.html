@@ -38,11 +38,32 @@
       <div class="game-area">
         <canvas id="board" width="512" height="512"></canvas>
         <div class="hud">
-          <div><strong id="level-name">—</strong></div>
-          <div>Chips needed: <span id="chips-needed">0</span></div>
-          <div>Time: <span id="time-left">—</span></div>
-          <div>Keys: <span id="keys">—</span></div>
-          <div>Boots: <span id="boots">—</span></div>
+          <div class="panel-title">
+            <div id="level-name">—</div>
+            <div id="level-password" class="password"></div>
+          </div>
+          <div class="panel-row stats">
+            <div class="stat">
+              <span class="label">Chips</span>
+              <span id="chips-needed">0</span>
+            </div>
+            <div class="stat">
+              <span class="label">Time</span>
+              <span id="time-left">—</span>
+            </div>
+          </div>
+          <div class="panel-row inventory">
+            <canvas class="icon-slot" id="key-0" width="24" height="24"></canvas>
+            <canvas class="icon-slot" id="key-1" width="24" height="24"></canvas>
+            <canvas class="icon-slot" id="key-2" width="24" height="24"></canvas>
+            <canvas class="icon-slot" id="key-3" width="24" height="24"></canvas>
+          </div>
+          <div class="panel-row inventory">
+            <canvas class="icon-slot" id="boot-0" width="24" height="24"></canvas>
+            <canvas class="icon-slot" id="boot-1" width="24" height="24"></canvas>
+            <canvas class="icon-slot" id="boot-2" width="24" height="24"></canvas>
+            <canvas class="icon-slot" id="boot-3" width="24" height="24"></canvas>
+          </div>
           <div id="status" class="status"></div>
           <p class="hint">
             Use arrow keys to move (click the board first), or on mobile tap
