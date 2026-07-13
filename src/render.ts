@@ -73,13 +73,16 @@ export function drawBoard(
       const x = col * cellSize;
       const y = row * cellSize;
 
-      // The floor tile is whichever of top/bot isn't currently occupied by
-      // a creature representation. For rulesets (like MS) that bake the
-      // live creature graphic into `top`, `bot` still holds the real floor.
-      const floorTile = isCreatureId(cell.top.id) ? cell.bot : cell.top;
-      drawTile(ctx, tileset, floorTile.id, x, y, cellSize);
+      // bot is the buried tile (Empty in the common case, or the real
+      // floor/terrain underneath top whenever the level's two-layer
+      // format stacks something over it — most often a creature, but
+      // not exclusively). Draw it first, then composite top over it
+      // via the sprite's own alpha channel, unless top is a creature
+      // id: creatures are drawn separately by drawCreatureOverlay so
+      // they can be positioned mid-tile during movement.
+      drawTile(ctx, tileset, cell.bot.id, x, y, cellSize);
 
-      if (isCreatureId(cell.top.id)) {
+      if (!isCreatureId(cell.top.id) && cell.top.id !== cell.bot.id) {
         drawTile(ctx, tileset, cell.top.id, x, y, cellSize);
       }
     }
