@@ -45,8 +45,8 @@ const bootIconCtxs = [0, 1, 2, 3].map(
 for (const ctx of [...keyIconCtxs, ...bootIconCtxs]) {
   ctx.imageSmoothingEnabled = false;
 }
-const prevKeysDrawn: boolean[] = [false, false, false, false];
-const prevBootsDrawn: boolean[] = [false, false, false, false];
+const prevKeysDrawn: (boolean | null)[] = [null, null, null, null];
+const prevBootsDrawn: (boolean | null)[] = [null, null, null, null];
 
 let levels: GameSetup[] = [];
 let game: Game | null = null;
