@@ -2,6 +2,7 @@ import {
   Game,
   splitDatFile,
   Ruleset,
+  Tile,
   NIL,
   NORTH,
   WEST,
@@ -9,8 +10,8 @@ import {
   EAST,
   type GameSetup,
 } from "tworld-engine";
-import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, type ViewportMode } from "./render";
-import { loadTileset, type Tileset } from "./tileset";
+import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
+import { loadTileset, drawTile, type Tileset } from "./tileset";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -27,11 +28,25 @@ const rulesetSelect = document.querySelector<HTMLSelectElement>("#ruleset-select
 const viewportSelect = document.querySelector<HTMLSelectElement>("#viewport-select")!;
 const restartBtn = document.querySelector<HTMLButtonElement>("#restart-btn")!;
 const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
+const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
 const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
-const keysEl = document.querySelector<HTMLElement>("#keys")!;
-const bootsEl = document.querySelector<HTMLElement>("#boots")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
+
+const ICON_SIZE = 24;
+const KEY_TILES = [Tile.Key_Red, Tile.Key_Blue, Tile.Key_Yellow, Tile.Key_Green];
+const BOOT_TILES = [Tile.Boots_Ice, Tile.Boots_Slide, Tile.Boots_Fire, Tile.Boots_Water];
+const keyIconCtxs = [0, 1, 2, 3].map(
+  (n) => document.querySelector<HTMLCanvasElement>(`#key-${n}`)!.getContext("2d")!,
+);
+const bootIconCtxs = [0, 1, 2, 3].map(
+  (n) => document.querySelector<HTMLCanvasElement>(`#boot-${n}`)!.getContext("2d")!,
+);
+for (const ctx of [...keyIconCtxs, ...bootIconCtxs]) {
+  ctx.imageSmoothingEnabled = false;
+}
+const prevKeysDrawn: (boolean | null)[] = [null, null, null, null];
+const prevBootsDrawn: (boolean | null)[] = [null, null, null, null];
 
 let levels: GameSetup[] = [];
 let game: Game | null = null;
@@ -121,6 +136,7 @@ function startLevel(index: number): void {
   if (!setup) return;
   game = new Game(setup, currentRuleset());
   levelNameEl.textContent = `#${setup.number} ${setup.name || "(untitled)"}`;
+  levelPasswordEl.textContent = setup.passwd ? `Password: ${setup.passwd}` : "";
 
   tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
   render();
@@ -146,18 +162,22 @@ function render(): void {
   const state = game.state;
 
   // xviewpos/yviewpos are Chip's raw map position in eighths-of-a-tile
-  // units (ported directly from the engine's own prepareDisplay logic).
-  // Dividing by 8 gives Chip's tile column/row, which the demo (acting as
-  // the "host renderer," same as the original game's display code) uses
-  // to compute the traditional windowed view.
+  // units (ported directly from the engine's own prepareDisplay logic),
+  // updated continuously by the engine during movement. computeViewport
+  // uses them directly so the traditional view scrolls smoothly instead
+  // of snapping a full tile at a time.
   const mode = currentViewportMode();
-  const chipCol = Math.floor(state.xviewpos / 8);
-  const chipRow = Math.floor(state.yviewpos / 8);
-  const viewport = computeViewport(mode, chipCol, chipRow);
+  const viewport = computeViewport(mode, state.xviewpos, state.yviewpos);
   const cellSize = CELL_SIZES[mode];
 
-  canvas.width = viewport.width * cellSize;
-  canvas.height = viewport.height * cellSize;
+  // The canvas is always sized to exactly the visible window
+  // (TRADITIONAL_SIZE tiles, or the whole GRID in full mode); the
+  // viewport itself may be one tile wider/taller than that to supply a
+  // scroll buffer (see computeViewport), which the canvas clips off.
+  const displayCols = mode === "full" ? viewport.width : TRADITIONAL_SIZE;
+  const displayRows = mode === "full" ? viewport.height : TRADITIONAL_SIZE;
+  canvas.width = displayCols * cellSize;
+  canvas.height = displayRows * cellSize;
   ctx.imageSmoothingEnabled = false;
 
   drawBoard(ctx, tileset, state.map, viewport, cellSize);
@@ -168,8 +188,20 @@ function render(): void {
     ? Math.max(0, Math.ceil((state.timelimit - state.currenttime) / TICKS_PER_SECOND))
     : Infinity;
   timeLeftEl.textContent = state.timelimit ? String(secondsLeft) : "∞";
-  keysEl.textContent = `R:${state.keys[0]} B:${state.keys[1]} Y:${state.keys[2]} G:${state.keys[3]}`;
-  bootsEl.textContent = `Ice:${state.boots[0]} Slide:${state.boots[1]} Fire:${state.boots[2]} Water:${state.boots[3]}`;
+  for (let n = 0; n < 4; n++) {
+    const hasKey = Boolean(state.keys[n]);
+    if (hasKey !== prevKeysDrawn[n]) {
+      keyIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+      drawTile(keyIconCtxs[n]!, tileset, hasKey ? KEY_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
+      prevKeysDrawn[n] = hasKey;
+    }
+    const hasBoot = Boolean(state.boots[n]);
+    if (hasBoot !== prevBootsDrawn[n]) {
+      bootIconCtxs[n]!.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+      drawTile(bootIconCtxs[n]!, tileset, hasBoot ? BOOT_TILES[n]! : Tile.Empty, 0, 0, ICON_SIZE);
+      prevBootsDrawn[n] = hasBoot;
+    }
+  }
 }
 
 async function main(): Promise<void> {
