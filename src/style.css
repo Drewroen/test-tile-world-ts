@@ -118,3 +118,39 @@ canvas {
   opacity: 0.7;
   font-size: 0.8rem;
 }
+
+@media (max-width: 640px) {
+  body {
+    padding: 0;
+  }
+
+  #app {
+    max-width: 100%;
+  }
+
+  h1,
+  .subtitle,
+  .hint {
+    display: none;
+  }
+
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    background: canvas;
+    border-bottom: 1px solid currentColor;
+    gap: 0.75rem;
+  }
+
+  .game-area {
+    padding: 0.75rem;
+  }
+
+  canvas#board {
+    max-width: 100%;
+    height: auto;
+  }
+}
