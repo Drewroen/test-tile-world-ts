@@ -9,7 +9,7 @@ import {
   EAST,
   type GameSetup,
 } from "tworld-engine";
-import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, type ViewportMode } from "./render";
+import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
 import { loadTileset, type Tileset } from "./tileset";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
@@ -146,18 +146,22 @@ function render(): void {
   const state = game.state;
 
   // xviewpos/yviewpos are Chip's raw map position in eighths-of-a-tile
-  // units (ported directly from the engine's own prepareDisplay logic).
-  // Dividing by 8 gives Chip's tile column/row, which the demo (acting as
-  // the "host renderer," same as the original game's display code) uses
-  // to compute the traditional windowed view.
+  // units (ported directly from the engine's own prepareDisplay logic),
+  // updated continuously by the engine during movement. computeViewport
+  // uses them directly so the traditional view scrolls smoothly instead
+  // of snapping a full tile at a time.
   const mode = currentViewportMode();
-  const chipCol = Math.floor(state.xviewpos / 8);
-  const chipRow = Math.floor(state.yviewpos / 8);
-  const viewport = computeViewport(mode, chipCol, chipRow);
+  const viewport = computeViewport(mode, state.xviewpos, state.yviewpos);
   const cellSize = CELL_SIZES[mode];
 
-  canvas.width = viewport.width * cellSize;
-  canvas.height = viewport.height * cellSize;
+  // The canvas is always sized to exactly the visible window
+  // (TRADITIONAL_SIZE tiles, or the whole GRID in full mode); the
+  // viewport itself may be one tile wider/taller than that to supply a
+  // scroll buffer (see computeViewport), which the canvas clips off.
+  const displayCols = mode === "full" ? viewport.width : TRADITIONAL_SIZE;
+  const displayRows = mode === "full" ? viewport.height : TRADITIONAL_SIZE;
+  canvas.width = displayCols * cellSize;
+  canvas.height = displayRows * cellSize;
   ctx.imageSmoothingEnabled = false;
 
   drawBoard(ctx, tileset, state.map, viewport, cellSize);
