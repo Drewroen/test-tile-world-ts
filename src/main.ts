@@ -52,6 +52,16 @@ let levels: GameSetup[] = [];
 let game: Game | null = null;
 let tickHandle: number | undefined;
 let tileset: Tileset | null = null;
+// The level timer/tick loop shouldn't run until the player makes their
+// first move (matches Tile World's behavior of not starting the clock
+// on level load).
+let gameStarted = false;
+
+function ensureStarted(): void {
+  if (gameStarted || !game) return;
+  gameStarted = true;
+  tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
+}
 
 const KEY_TO_DIR: Record<string, number> = {
   ArrowUp: NORTH,
@@ -66,6 +76,7 @@ window.addEventListener("keydown", (e) => {
   if (dir !== undefined) {
     e.preventDefault();
     heldDirs.add(dir);
+    ensureStarted();
   }
 });
 window.addEventListener("keyup", (e) => {
@@ -95,6 +106,7 @@ function handleTouchStartOrMove(e: TouchEvent): void {
   for (const touch of Array.from(e.changedTouches)) {
     touchDirs.set(touch.identifier, directionForTouch(touch));
   }
+  ensureStarted();
 }
 function handleTouchEnd(e: TouchEvent): void {
   e.preventDefault();
@@ -129,6 +141,7 @@ function startLevel(index: number): void {
   }
   heldDirs.clear();
   touchDirs.clear();
+  gameStarted = false;
   statusEl.textContent = "";
   statusEl.className = "status";
 
@@ -138,7 +151,6 @@ function startLevel(index: number): void {
   levelNameEl.textContent = `#${setup.number} ${setup.name || "(untitled)"}`;
   levelPasswordEl.textContent = setup.passwd ? `Password: ${setup.passwd}` : "";
 
-  tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
   render();
 }
 
@@ -181,7 +193,18 @@ function render(): void {
   ctx.imageSmoothingEnabled = false;
 
   drawBoard(ctx, tileset, state.map, viewport, cellSize);
-  drawCreatureOverlay(ctx, tileset, game.getCreatures(), viewport, cellSize);
+  // getCreatures() only has data for rulesets whose logic tracks an active
+  // creature list (Lynx); MS's logic doesn't expose one, so it always
+  // returns []. Chip himself is always state.creatures[0] regardless of
+  // ruleset, so fall back to that to keep the player visible under MS.
+  const creatures = game.getCreatures();
+  drawCreatureOverlay(
+    ctx,
+    tileset,
+    creatures.length > 0 ? creatures : [state.creatures[0]],
+    viewport,
+    cellSize,
+  );
 
   chipsNeededEl.textContent = String(state.chipsneeded);
   const secondsLeft = state.timelimit
