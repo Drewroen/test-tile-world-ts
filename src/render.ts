@@ -1,4 +1,4 @@
-import { Tile, type MapCell } from "tworld-engine";
+import { Tile, NORTH, WEST, SOUTH, EAST, type MapCell } from "tworld-engine";
 import { drawTile, type Tileset } from "./tileset";
 
 export const GRID = 32;
@@ -92,7 +92,7 @@ export function drawBoard(
 export function drawCreatureOverlay(
   ctx: CanvasRenderingContext2D,
   tileset: Tileset,
-  creatures: { pos: number; id: number; dir: number; hidden: boolean }[],
+  creatures: { pos: number; id: number; dir: number; hidden: boolean; moving: number }[],
   viewport: Viewport,
   cellSize: number,
 ): void {
@@ -101,6 +101,21 @@ export function drawCreatureOverlay(
     const col = (cr.pos % GRID) - viewport.x0;
     const row = Math.floor(cr.pos / GRID) - viewport.y0;
     if (col < 0 || col >= viewport.width || row < 0 || row >= viewport.height) continue;
-    drawTile(ctx, tileset, packedCreatureTile(cr), col * cellSize, row * cellSize, cellSize);
+
+    // pos is already the destination tile once a move starts; moving
+    // counts down from 8 to 0 (eighths of a tile) as the creature eases
+    // into it, so it's drawn offset backward along its direction of
+    // travel and slides forward as moving shrinks.
+    let x = col * cellSize;
+    let y = row * cellSize;
+    const offset = (cr.moving * cellSize) / 8;
+    switch (cr.dir) {
+      case NORTH: y += offset; break;
+      case WEST: x += offset; break;
+      case SOUTH: y -= offset; break;
+      case EAST: x -= offset; break;
+    }
+
+    drawTile(ctx, tileset, packedCreatureTile(cr), x, y, cellSize);
   }
 }
