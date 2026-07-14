@@ -14,6 +14,7 @@ import {
 import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
 import { loadTileset, drawTile, type Tileset } from "./tileset";
 import { SoundPlayer } from "./sound";
+import { getBestTime, recordTime } from "./besttime";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -38,6 +39,7 @@ const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
 const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
 const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
+const bestTimeEl = document.querySelector<HTMLElement>("#best-time")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
 const hintPanelEl = document.querySelector<HTMLElement>("#hint-panel")!;
 
@@ -162,6 +164,9 @@ function startLevel(index: number): void {
   levelNameEl.textContent = `#${setup.number} ${setup.name || "(untitled)"}`;
   levelPasswordEl.textContent = setup.passwd ? `Password: ${setup.passwd}` : "";
 
+  const bestSoFar = getBestTime(setup.number, currentRuleset());
+  bestTimeEl.textContent = bestSoFar === null ? "—" : `${bestSoFar}s`;
+
   render();
 }
 
@@ -178,6 +183,15 @@ function tick(): void {
     }
     statusEl.textContent = result > 0 ? "You win!" : "You lose.";
     statusEl.className = `status ${result > 0 ? "win" : "lose"}`;
+    if (result > 0 && game) {
+      const setup = levels[Number(levelSelect.value)];
+      if (setup) {
+        const seconds = game.secondsPlayed();
+        if (recordTime(setup.number, currentRuleset(), seconds)) {
+          bestTimeEl.textContent = `${seconds}s`;
+        }
+      }
+    }
   }
 }
 
