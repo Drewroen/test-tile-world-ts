@@ -12,6 +12,7 @@ import {
 } from "tworld-engine";
 import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
 import { loadTileset, drawTile, type Tileset } from "./tileset";
+import { SoundPlayer } from "./sound";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -56,10 +57,12 @@ let tileset: Tileset | null = null;
 // first move (matches Tile World's behavior of not starting the clock
 // on level load).
 let gameStarted = false;
+let soundPlayer: SoundPlayer | null = null;
 
 function ensureStarted(): void {
   if (gameStarted || !game) return;
   gameStarted = true;
+  soundPlayer?.unlock();
   tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
 }
 
@@ -139,6 +142,7 @@ function startLevel(index: number): void {
     clearInterval(tickHandle);
     tickHandle = undefined;
   }
+  soundPlayer?.reset();
   heldDirs.clear();
   touchDirs.clear();
   gameStarted = false;
@@ -157,6 +161,7 @@ function startLevel(index: number): void {
 function tick(): void {
   if (!game) return;
   const result = game.doTurn(currentInputCommand());
+  soundPlayer?.sync(game.getSoundEffects(), currentRuleset());
   render();
 
   if (result !== 0) {
@@ -219,6 +224,7 @@ function render(): void {
 async function main(): Promise<void> {
   const base = import.meta.env.BASE_URL;
   tileset = await loadTileset(`${base}tiles.bmp`);
+  soundPlayer = await SoundPlayer.load(base);
 
   const res = await fetch(`${base}intro.dat`);
   const bytes = new Uint8Array(await res.arrayBuffer());
