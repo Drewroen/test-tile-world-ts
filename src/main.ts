@@ -8,11 +8,13 @@ import {
   WEST,
   SOUTH,
   EAST,
+  SF_SHOWHINT,
   type GameSetup,
 } from "tworld-engine";
 import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
 import { loadTileset, drawTile, type Tileset } from "./tileset";
 import { SoundManager } from "./sound";
+import { getBestTime, recordTime } from "./besttime";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -29,11 +31,18 @@ const levelSelect = document.querySelector<HTMLSelectElement>("#level-select")!;
 const rulesetSelect = document.querySelector<HTMLSelectElement>("#ruleset-select")!;
 const viewportSelect = document.querySelector<HTMLSelectElement>("#viewport-select")!;
 const restartBtn = document.querySelector<HTMLButtonElement>("#restart-btn")!;
+const passwordInput = document.querySelector<HTMLInputElement>("#password-input")!;
+const passwordGoBtn = document.querySelector<HTMLButtonElement>("#password-go-btn")!;
+const passwordErrorEl = document.querySelector<HTMLElement>("#password-error")!;
+const gameAreaEl = document.querySelector<HTMLDivElement>("#game-area")!;
+const fullscreenBtn = document.querySelector<HTMLButtonElement>("#fullscreen-btn")!;
 const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
 const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
 const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
+const bestTimeEl = document.querySelector<HTMLElement>("#best-time")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
+const hintPanelEl = document.querySelector<HTMLElement>("#hint-panel")!;
 const setStatusEl = document.querySelector<HTMLElement>("#set-status")!;
 
 // Gliderbot's public mirror of the official CC1 level sets. It's a plain
@@ -186,6 +195,9 @@ function startLevel(index: number): void {
   levelNameEl.textContent = `#${setup.number} ${setup.name || "(untitled)"}`;
   levelPasswordEl.textContent = setup.passwd ? `Password: ${setup.passwd}` : "";
 
+  const bestSoFar = getBestTime(setup.number, currentRuleset());
+  bestTimeEl.textContent = bestSoFar === null ? "—" : `${bestSoFar}s`;
+
   render();
 }
 
@@ -203,6 +215,15 @@ function tick(): void {
     sound.stopLoops();
     statusEl.textContent = result > 0 ? "You win!" : "You lose.";
     statusEl.className = `status ${result > 0 ? "win" : "lose"} status-pop`;
+    if (result > 0 && game) {
+      const setup = levels[Number(levelSelect.value)];
+      if (setup) {
+        const seconds = game.secondsPlayed();
+        if (recordTime(setup.number, currentRuleset(), seconds)) {
+          bestTimeEl.textContent = `${seconds}s`;
+        }
+      }
+    }
   }
 }
 
@@ -230,30 +251,26 @@ function render(): void {
   ctx.imageSmoothingEnabled = false;
 
   drawBoard(ctx, tileset, state.map, viewport, cellSize);
-  // getCreatures() only has data for rulesets whose logic tracks an active
-  // creature list (Lynx); MS's logic doesn't expose one, so it always
-  // returns []. state.creatures itself holds every creature (Chip plus all
-  // monsters) under both rulesets, so fall back to that full list rather
-  // than just Chip alone to keep monsters visible under MS.
+  // getCreatures() now returns real per-tick data under both rulesets
+  // (tworld-engine's MsLogic.activeCreatures() is a passthrough of
+  // state.creatures, mirroring Lynx). MS bakes Chip's sprite directly into
+  // the map cell every tick, including swapping in the drowned/burned/
+  // exited sprite once chipstatus reflects it (see tworld-engine's
+  // updateCreature) — so drawBoard above already shows the right thing at
+  // Chip's tile. But the creature list still carries Chip as a live,
+  // non-hidden entry with his bare directional sprite, since MS never
+  // marks him hidden on death the way Lynx does. Drawing him again here
+  // would paint that plain sprite right over the correctly-baked death
+  // tile, hiding it. 0 = CHIP_OKAY, 6 = CHIP_SQUISHED (not yet a loss) —
+  // anything else means Chip is dead and should be left to the map tile
+  // alone.
   const creatures = game.getCreatures();
-  const overlayCreatures = creatures.length > 0 ? creatures : state.creatures;
-  // MS bakes Chip's sprite directly into the map cell every tick,
-  // including swapping in the drowned/burned/exited sprite once
-  // chipstatus reflects it (see tworld-engine's updateCreature) — so
-  // drawBoard above already shows the right thing at Chip's tile. But
-  // state.creatures (the fallback list used above) still carries Chip as
-  // a live, non-hidden entry with his bare directional sprite, since MS
-  // never marks him hidden on death the way Lynx does. Drawing him again
-  // here would paint that plain sprite right over the correctly-baked
-  // death tile, hiding it. 0 = CHIP_OKAY, 6 = CHIP_SQUISHED (not yet a
-  // loss) — anything else means Chip is dead and should be left to the
-  // map tile alone.
   const msChipIsDead =
     state.ruleset === Ruleset.MS && state.msstate.chipstatus !== 0 && state.msstate.chipstatus !== 6;
   drawCreatureOverlay(
     ctx,
     tileset,
-    msChipIsDead ? overlayCreatures.filter((cr) => cr.id !== Tile.Chip) : overlayCreatures,
+    msChipIsDead ? creatures.filter((cr) => cr.id !== Tile.Chip) : creatures,
     viewport,
     cellSize,
   );
@@ -277,6 +294,10 @@ function render(): void {
       prevBootsDrawn[n] = hasBoot;
     }
   }
+
+  const showHint = (state.statusflags & SF_SHOWHINT) !== 0;
+  hintPanelEl.classList.toggle("visible", showHint);
+  hintPanelEl.textContent = showHint ? state.hinttext : "";
 }
 
 async function loadSet(url: string): Promise<void> {
@@ -321,6 +342,30 @@ async function main(): Promise<void> {
   viewportSelect.addEventListener("change", render);
   restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
   setSelect.addEventListener("change", () => loadSet(setSelect.value || defaultSetUrl));
+  fullscreenBtn.addEventListener("click", () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      gameAreaEl.requestFullscreen();
+    }
+  });
+
+  function goToPassword(): void {
+    // tworld/series.c looks up a level by password with a case-sensitive
+    // strcmp, so this matches that exactly rather than lowercasing input.
+    const index = levels.findIndex((lvl) => lvl.passwd === passwordInput.value.trim());
+    if (index < 0) {
+      passwordErrorEl.textContent = "No level with that password.";
+      return;
+    }
+    passwordErrorEl.textContent = "";
+    levelSelect.value = String(index);
+    startLevel(index);
+  }
+  passwordGoBtn.addEventListener("click", goToPassword);
+  passwordInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") goToPassword();
+  });
 
   await loadSet(defaultSetUrl);
 
