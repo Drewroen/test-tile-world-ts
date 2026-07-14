@@ -23,6 +23,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#board")!;
 const ctx = canvas.getContext("2d")!;
 ctx.imageSmoothingEnabled = false;
 
+const setSelect = document.querySelector<HTMLSelectElement>("#set-select")!;
 const levelSelect = document.querySelector<HTMLSelectElement>("#level-select")!;
 const rulesetSelect = document.querySelector<HTMLSelectElement>("#ruleset-select")!;
 const viewportSelect = document.querySelector<HTMLSelectElement>("#viewport-select")!;
@@ -32,6 +33,36 @@ const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
 const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
+const setStatusEl = document.querySelector<HTMLElement>("#set-status")!;
+
+// Gliderbot's public mirror of the official CC1 level sets. It's a plain
+// directory listing (Apache/nginx autoindex), so the set list is scraped
+// by pulling out every <a href> that points at a .dat file rather than
+// relying on any particular page layout.
+const CC1_SETS_INDEX_URL = "https://bitbusters.club/gliderbot/sets/cc1/";
+
+interface DatSet {
+  name: string;
+  url: string;
+}
+
+async function fetchAvailableSets(): Promise<DatSet[]> {
+  const res = await fetch(CC1_SETS_INDEX_URL);
+  if (!res.ok) throw new Error(`Failed to load set list (HTTP ${res.status})`);
+  const html = await res.text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  const sets: DatSet[] = [];
+  for (const anchor of Array.from(doc.querySelectorAll("a[href]"))) {
+    const href = anchor.getAttribute("href") ?? "";
+    if (!/\.dat$/i.test(href)) continue;
+    const url = new URL(href, CC1_SETS_INDEX_URL).toString();
+    const name = decodeURIComponent(href).replace(/\.dat$/i, "");
+    sets.push({ name, url });
+  }
+  sets.sort((a, b) => a.name.localeCompare(b.name));
+  return sets;
+}
 
 const ICON_SIZE = 24;
 const KEY_TILES = [Tile.Key_Red, Tile.Key_Blue, Tile.Key_Yellow, Tile.Key_Green];
@@ -227,29 +258,65 @@ function render(): void {
   }
 }
 
+async function loadSet(url: string): Promise<void> {
+  setSelect.disabled = true;
+  levelSelect.disabled = true;
+  setStatusEl.textContent = "Loading set…";
+  setStatusEl.className = "set-status";
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    levels = splitDatFile(bytes).levels;
+
+    levelSelect.innerHTML = "";
+    levels.forEach((level, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = `#${level.number} ${level.name || "(untitled)"}`;
+      levelSelect.appendChild(opt);
+    });
+
+    setStatusEl.textContent = "";
+    startLevel(0);
+  } catch (err) {
+    setStatusEl.textContent = `Failed to load set: ${(err as Error).message}`;
+    setStatusEl.className = "set-status error";
+  } finally {
+    setSelect.disabled = false;
+    levelSelect.disabled = false;
+  }
+}
+
 async function main(): Promise<void> {
   const base = import.meta.env.BASE_URL;
+  const defaultSetUrl = `${base}intro.dat`;
   tileset = await loadTileset(`${base}tiles.bmp`);
-
-  const res = await fetch(`${base}intro.dat`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const parsed = splitDatFile(bytes);
-  levels = parsed.levels;
-
-  levelSelect.innerHTML = "";
-  levels.forEach((level, i) => {
-    const opt = document.createElement("option");
-    opt.value = String(i);
-    opt.textContent = `#${level.number} ${level.name || "(untitled)"}`;
-    levelSelect.appendChild(opt);
-  });
 
   levelSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
   rulesetSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
   viewportSelect.addEventListener("change", render);
   restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
+  setSelect.addEventListener("change", () => loadSet(setSelect.value || defaultSetUrl));
 
-  startLevel(0);
+  await loadSet(defaultSetUrl);
+
+  // Populate the set picker with the CC1 sets mirrored at bitbusters.club in
+  // the background; the default intro.dat is already playable above.
+  try {
+    const sets = await fetchAvailableSets();
+    for (const set of sets) {
+      const opt = document.createElement("option");
+      opt.value = set.url;
+      opt.textContent = set.name;
+      setSelect.appendChild(opt);
+    }
+  } catch (err) {
+    console.error("Failed to load CC1 set list", err);
+    setStatusEl.textContent = `Couldn't load the set list from bitbusters.club: ${(err as Error).message}`;
+    setStatusEl.className = "set-status error";
+  }
 }
 
 main().catch((err) => {

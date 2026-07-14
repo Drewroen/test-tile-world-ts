@@ -16,6 +16,12 @@
 
       <div class="toolbar">
         <label>
+          Set:
+          <select id="set-select">
+            <option value="">Intro (default)</option>
+          </select>
+        </label>
+        <label>
           Level:
           <select id="level-select"></select>
         </label>
@@ -35,6 +41,7 @@
         </label>
         <button id="restart-btn">Restart</button>
       </div>
+      <div id="set-status" class="set-status"></div>
 
       <div class="game-area">
         <canvas id="board" width="512" height="512"></canvas>
