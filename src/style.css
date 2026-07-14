@@ -34,6 +34,18 @@ h1 {
   flex-wrap: wrap;
 }
 
+.set-status {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  margin: -0.5rem 0 1rem;
+  min-height: 1.2em;
+}
+
+.set-status.error {
+  color: #c62828;
+  opacity: 1;
+}
+
 .game-area {
   display: flex;
   gap: 1.5rem;
