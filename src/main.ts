@@ -8,6 +8,7 @@ import {
   WEST,
   SOUTH,
   EAST,
+  SF_SHOWHINT,
   type GameSetup,
 } from "tworld-engine";
 import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
@@ -33,6 +34,7 @@ const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
 const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
+const hintPanelEl = document.querySelector<HTMLElement>("#hint-panel")!;
 
 const ICON_SIZE = 24;
 const KEY_TILES = [Tile.Key_Red, Tile.Key_Blue, Tile.Key_Yellow, Tile.Key_Green];
@@ -219,6 +221,10 @@ function render(): void {
       prevBootsDrawn[n] = hasBoot;
     }
   }
+
+  const showHint = (state.statusflags & SF_SHOWHINT) !== 0;
+  hintPanelEl.classList.toggle("visible", showHint);
+  hintPanelEl.textContent = showHint ? state.hinttext : "";
 }
 
 async function main(): Promise<void> {
