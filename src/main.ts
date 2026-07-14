@@ -12,6 +12,7 @@ import {
 } from "tworld-engine";
 import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
 import { loadTileset, drawTile, type Tileset } from "./tileset";
+import { SoundManager } from "./sound";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -83,6 +84,7 @@ let levels: GameSetup[] = [];
 let game: Game | null = null;
 let tickHandle: number | undefined;
 let tileset: Tileset | null = null;
+const sound = new SoundManager(import.meta.env.BASE_URL);
 // The level timer/tick loop shouldn't run until the player makes their
 // first move (matches Tile World's behavior of not starting the clock
 // on level load).
@@ -173,6 +175,7 @@ function startLevel(index: number): void {
   heldDirs.clear();
   touchDirs.clear();
   gameStarted = false;
+  sound.reset();
   statusEl.textContent = "";
   statusEl.className = "status";
 
@@ -188,6 +191,7 @@ function startLevel(index: number): void {
 function tick(): void {
   if (!game) return;
   const result = game.doTurn(currentInputCommand());
+  sound.update(game.getSoundEffects(), currentRuleset());
   render();
 
   if (result !== 0) {
@@ -195,8 +199,9 @@ function tick(): void {
       clearInterval(tickHandle);
       tickHandle = undefined;
     }
+    sound.stopLoops();
     statusEl.textContent = result > 0 ? "You win!" : "You lose.";
-    statusEl.className = `status ${result > 0 ? "win" : "lose"}`;
+    statusEl.className = `status ${result > 0 ? "win" : "lose"} status-pop`;
   }
 }
 
