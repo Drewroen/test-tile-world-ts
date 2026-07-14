@@ -90,6 +90,7 @@ const prevKeysDrawn: (boolean | null)[] = [null, null, null, null];
 const prevBootsDrawn: (boolean | null)[] = [null, null, null, null];
 
 let levels: GameSetup[] = [];
+let currentSetId = "";
 let game: Game | null = null;
 let tickHandle: number | undefined;
 let tileset: Tileset | null = null;
@@ -195,7 +196,7 @@ function startLevel(index: number): void {
   levelNameEl.textContent = `#${setup.number} ${setup.name || "(untitled)"}`;
   levelPasswordEl.textContent = setup.passwd ? `Password: ${setup.passwd}` : "";
 
-  const bestSoFar = getBestTime(setup.number, currentRuleset());
+  const bestSoFar = getBestTime(currentSetId, setup.number, currentRuleset());
   bestTimeEl.textContent = bestSoFar === null ? "—" : `${bestSoFar}s`;
 
   render();
@@ -223,7 +224,7 @@ function tick(): void {
         const seconds = hasTimeLimit
           ? Math.max(0, Math.ceil((state.timelimit - state.currenttime) / TICKS_PER_SECOND))
           : game.secondsPlayed();
-        if (recordTime(setup.number, currentRuleset(), seconds, hasTimeLimit)) {
+        if (recordTime(currentSetId, setup.number, currentRuleset(), seconds, hasTimeLimit)) {
           bestTimeEl.textContent = `${seconds}s`;
         }
       }
@@ -315,6 +316,7 @@ async function loadSet(url: string): Promise<void> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     levels = splitDatFile(bytes).levels;
+    currentSetId = url;
 
     levelSelect.innerHTML = "";
     levels.forEach((level, i) => {
