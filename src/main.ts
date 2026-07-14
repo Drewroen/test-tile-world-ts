@@ -218,8 +218,12 @@ function tick(): void {
     if (result > 0 && game) {
       const setup = levels[Number(levelSelect.value)];
       if (setup) {
-        const seconds = game.secondsPlayed();
-        if (recordTime(setup.number, currentRuleset(), seconds)) {
+        const state = game.state;
+        const hasTimeLimit = Boolean(state.timelimit);
+        const seconds = hasTimeLimit
+          ? Math.max(0, Math.ceil((state.timelimit - state.currenttime) / TICKS_PER_SECOND))
+          : game.secondsPlayed();
+        if (recordTime(setup.number, currentRuleset(), seconds, hasTimeLimit)) {
           bestTimeEl.textContent = `${seconds}s`;
         }
       }
