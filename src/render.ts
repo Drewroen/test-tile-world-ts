@@ -63,6 +63,15 @@ function isCreatureId(id: number): boolean {
   return id >= Tile.Chip && id < Tile.Water_Splash;
 }
 
+// Water_Splash/Bomb_Explosion/Entity_Explosion: the death/destruction
+// animation a creature's list slot is repurposed into when it dies (see
+// tworld-engine's removeCreature). These aren't directional — they have a
+// single sprite apiece — so, unlike every other creature id, their `dir`
+// must NOT be packed into the low bits below.
+function isAnimationId(id: number): boolean {
+  return id >= Tile.Water_Splash && id <= Tile.Animation_Reserved1;
+}
+
 // A Creature's `id` is the bare base type (e.g. Tile.Chip) and `dir` is a
 // separate NORTH/WEST/SOUTH/EAST bitmask (1/2/4/8) — unlike a map cell's
 // tile id, which already has the direction packed into its low 2 bits
@@ -81,8 +90,20 @@ function diridx(dir: number): number {
 // looked up, or land on an id with no sprite at all. Skip the packing for
 // any id at or past that boundary.
 function packedCreatureTile(cr: { id: number; dir: number }): number {
-  if (cr.id >= Tile.Water_Splash) return cr.id;
+  if (isAnimationId(cr.id)) return cr.id;
   return cr.id | diridx(cr.dir);
+}
+
+// MS's logic bakes Chip's death directly into the map cell (see
+// tworld-engine's synchDisplayTile) instead of routing it through the
+// creature-animation system Lynx uses, so it's never touched by the fade in
+// drawCreatureOverlay. Its sprite is opaque in the source bitmap, so
+// without this it fully hides whatever Chip died on (e.g. the water
+// they drowned in). Give it the same partial transparency by hand.
+const DEATH_TILE_ALPHA = 0.55;
+
+function isDeathTileId(id: number): boolean {
+  return id === Tile.Drowned_Chip || id === Tile.Burned_Chip || id === Tile.Bombed_Chip;
 }
 
 export function drawBoard(
@@ -112,16 +133,32 @@ export function drawBoard(
       drawTile(ctx, tileset, cell.bot.id, x, y, cellSize);
 
       if (!isCreatureId(cell.top.id) && cell.top.id !== cell.bot.id) {
+        const isDeathTile = isDeathTileId(cell.top.id);
+        if (isDeathTile) ctx.globalAlpha = DEATH_TILE_ALPHA;
         drawTile(ctx, tileset, cell.top.id, x, y, cellSize);
+        if (isDeathTile) ctx.globalAlpha = 1;
       }
     }
   }
 }
 
+// A death/destruction animation's `frame` counts down from ~11 to 0 over
+// its lifetime (tworld-engine's advanceGame decrements it once per tick,
+// removing the creature once it goes negative). Fading its opacity over
+// that same countdown means the floor/water tile Chip died on becomes
+// visible again as the effect plays out, instead of the sprite's opaque
+// background hiding it for the animation's whole ~half-second lifetime.
+const ANIMATION_FRAME_MAX = 11;
+const ANIMATION_MIN_ALPHA = 0.15;
+
+function animationAlpha(frame: number): number {
+  return Math.max(ANIMATION_MIN_ALPHA, (frame + 1) / (ANIMATION_FRAME_MAX + 1));
+}
+
 export function drawCreatureOverlay(
   ctx: CanvasRenderingContext2D,
   tileset: Tileset,
-  creatures: { pos: number; id: number; dir: number; hidden: boolean; moving: number }[],
+  creatures: { pos: number; id: number; dir: number; hidden: boolean; moving: number; frame?: number }[],
   viewport: Viewport,
   cellSize: number,
 ): void {
@@ -147,6 +184,9 @@ export function drawCreatureOverlay(
       case EAST: x -= moveOffset; break;
     }
 
+    const isAnimation = isAnimationId(cr.id);
+    if (isAnimation) ctx.globalAlpha = animationAlpha(cr.frame ?? ANIMATION_FRAME_MAX);
     drawTile(ctx, tileset, packedCreatureTile(cr), x, y, cellSize);
+    if (isAnimation) ctx.globalAlpha = 1;
   }
 }

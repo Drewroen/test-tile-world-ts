@@ -34,6 +34,18 @@ h1 {
   flex-wrap: wrap;
 }
 
+.set-status {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  margin: -0.5rem 0 1rem;
+  min-height: 1.2em;
+}
+
+.set-status.error {
+  color: #c62828;
+  opacity: 1;
+}
+
 .game-area {
   display: flex;
   gap: 1.5rem;
@@ -135,6 +147,21 @@ canvas {
 
 .status.lose {
   color: #c62828;
+}
+
+.status-pop {
+  animation: status-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes status-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .hint {

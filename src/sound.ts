@@ -1,5 +1,6 @@
 import {
   Ruleset,
+  SND_COUNT,
   SND_CHIP_LOSES,
   SND_CHIP_WINS,
   SND_TIME_OUT,
@@ -25,20 +26,14 @@ import {
   SND_ICEWALKING,
   SND_WATERWALKING,
   SND_FIREWALKING,
-  SND_COUNT,
 } from "tworld-engine";
 
-// One-shot sound ids occupy bits [0, SND_ONESHOT_COUNT); loop ids occupy
-// [SND_ONESHOT_COUNT, SND_COUNT). Mirrors defs.h's SND_ONESHOT_COUNT=18
-// (tworld-engine doesn't export this specific constant, so it's
-// transcribed directly — see tworld-engine/src/constants.ts:173).
-const SND_ONESHOT_COUNT = 18;
-
-// Filename mapping transcribed directly from tworld/res/rc: the
-// ruleset-agnostic top section, then the [MS] and [Lynx] override
-// sections. Any id missing from a ruleset's table (e.g. SND_TILE_EMPTIED
-// under MS) is simply never triggered by that ruleset's game logic.
-const GLOBAL_FILES: Partial<Record<number, string>> = {
+// Filenames and the SND_* -> file mapping are transcribed from tworld's own
+// default resource config (res/rc): sounds shared by both rulesets live in
+// the unqualified section, the rest are overridden per-ruleset under
+// [MS]/[Lynx]. Indices with no entry in a ruleset's table are events the
+// original game plays silently under that ruleset.
+const SHARED: Partial<Record<number, string>> = {
   [SND_CHIP_WINS]: "tada.wav",
   [SND_ITEM_COLLECTED]: "ting.wav",
   [SND_BOOTS_STOLEN]: "thief.wav",
@@ -49,7 +44,7 @@ const GLOBAL_FILES: Partial<Record<number, string>> = {
   [SND_WATER_SPLASH]: "splash.wav",
 };
 
-const MS_FILES: Partial<Record<number, string>> = {
+const MS: Partial<Record<number, string>> = {
   [SND_CHIP_LOSES]: "death.wav",
   [SND_TIME_OUT]: "ding.wav",
   [SND_TIME_LOW]: "tick.wav",
@@ -58,7 +53,7 @@ const MS_FILES: Partial<Record<number, string>> = {
   [SND_SOCKET_OPENED]: "socket.wav",
 };
 
-const LYNX_FILES: Partial<Record<number, string>> = {
+const LYNX: Partial<Record<number, string>> = {
   [SND_CHIP_LOSES]: "derezz.wav",
   [SND_IC_COLLECTED]: "ting.wav",
   [SND_CANT_MOVE]: "bump.wav",
@@ -76,104 +71,135 @@ const LYNX_FILES: Partial<Record<number, string>> = {
   [SND_FIREWALKING]: "crackle.wav",
 };
 
-function fileFor(id: number, ruleset: number): string | undefined {
-  const rulesetFiles = ruleset === Ruleset.MS ? MS_FILES : LYNX_FILES;
-  return rulesetFiles[id] ?? GLOBAL_FILES[id];
+function soundFile(index: number, ruleset: Ruleset): string | undefined {
+  const table = ruleset === Ruleset.MS ? MS : LYNX;
+  return table[index] ?? SHARED[index];
 }
 
-export class SoundPlayer {
-  private readonly elementsByFile = new Map<string, HTMLAudioElement>();
-  private prevLoopBits = 0;
-  private unlocked = false;
+const ALL_FILES = Array.from(
+  new Set([...Object.values(SHARED), ...Object.values(MS), ...Object.values(LYNX)].filter((f): f is string => !!f)),
+);
 
-  private constructor() {}
+// SND indices below this threshold are one-shot effects (played from the
+// start each time the bit turns on); the rest are continuous/looping sounds
+// tied to an ongoing action (skating, sliding, block pushing, ...) that
+// should keep looping for as long as their bit stays set and stop the
+// instant it clears. Mirrors tworld-engine's internal (unexported)
+// SND_ONESHOT_COUNT = 18, i.e. everything from SND_BLOCK_MOVING on.
+const ONESHOT_COUNT = 18;
 
-  static async load(baseUrl: string): Promise<SoundPlayer> {
-    const player = new SoundPlayer();
-    const filenames = new Set<string>([
-      ...Object.values(GLOBAL_FILES),
-      ...Object.values(MS_FILES),
-      ...Object.values(LYNX_FILES),
-    ] as string[]);
-    for (const filename of filenames) {
-      const el = new Audio(`${baseUrl}sounds/${filename}`);
-      el.preload = "auto";
-      player.elementsByFile.set(filename, el);
+function isOneShot(index: number): boolean {
+  return index < ONESHOT_COUNT;
+}
+
+export class SoundManager {
+  private base: string;
+  // HTMLAudioElement.play() carries its own internal scheduling/decode
+  // latency in the browser's media pipeline — noticeable (tens of ms) even
+  // once the file is fully buffered. Decoding every sound into a raw
+  // AudioBuffer up front and firing it through an AudioBufferSourceNode
+  // instead plays back sample-accurately with none of that overhead, which
+  // is what actually gets a pickup/bump sound to feel instant.
+  private ctx: AudioContext;
+  private buffers = new Map<string, AudioBuffer>();
+  private activeLoops = new Map<number, AudioBufferSourceNode>();
+  private prevMask = 0;
+  muted = false;
+
+  constructor(base: string) {
+    this.base = base;
+    this.ctx = new AudioContext();
+  }
+
+  private async loadBuffer(file: string): Promise<void> {
+    if (this.buffers.has(file)) return;
+    const res = await fetch(`${this.base}sounds/${file}`);
+    const data = await res.arrayBuffer();
+    const buffer = await this.ctx.decodeAudioData(data);
+    this.buffers.set(file, buffer);
+  }
+
+  // Decodes every sound up front so the very first time an event fires,
+  // its buffer is already sitting in memory ready to play — without this,
+  // an infrequent sound (e.g. bumping a wall) would have to fetch and
+  // decode its file before anything could play, showing up as a
+  // noticeable delay between the action and the sound.
+  preload(): void {
+    for (const file of ALL_FILES) {
+      void this.loadBuffer(file);
     }
-    return player;
   }
 
-  // iOS Safari requires the very first play() on each element to happen
-  // synchronously inside a user-gesture handler, not merely "sometime
-  // after" one (unlike Chrome's looser per-domain activation). Call this
-  // once, directly from the same keydown/touchstart handler that starts
-  // the game, to unlock every element for later programmatic playback.
-  unlock(): void {
-    if (this.unlocked) return;
-    this.unlocked = true;
-    for (const el of this.elementsByFile.values()) {
-      el.play()
-        .then(() => el.pause())
-        .catch(() => {});
+  // AudioContexts start (or get force-suspended by the browser's autoplay
+  // policy) in a "suspended" state until a user gesture resumes them;
+  // call this from the same input handlers that already gate game start
+  // on a first keypress/tap so sounds aren't silently dropped.
+  resume(): void {
+    if (this.ctx.state === "suspended") void this.ctx.resume();
+  }
+
+  private play(file: string): AudioBufferSourceNode | undefined {
+    const buffer = this.buffers.get(file);
+    if (!buffer) return undefined;
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.ctx.destination);
+    source.start();
+    return source;
+  }
+
+  update(mask: number, ruleset: Ruleset): void {
+    if (this.muted) {
+      this.prevMask = mask;
+      return;
     }
-  }
+    for (let i = 0; i < SND_COUNT; i++) {
+      const bit = 1 << i;
+      const isSet = (mask & bit) !== 0;
+      const file = soundFile(i, ruleset);
+      if (!file) continue;
 
-  private play(id: number, ruleset: number): void {
-    const filename = fileFor(id, ruleset);
-    if (!filename) return;
-    const el = this.elementsByFile.get(filename);
-    if (!el) return;
-    el.currentTime = 0;
-    el.play().catch(() => {});
-  }
-
-  private startLoop(id: number, ruleset: number): void {
-    const filename = fileFor(id, ruleset);
-    if (!filename) return;
-    const el = this.elementsByFile.get(filename);
-    if (!el) return;
-    el.loop = true;
-    el.currentTime = 0;
-    el.play().catch(() => {});
-  }
-
-  private stopLoop(id: number, ruleset: number): void {
-    const filename = fileFor(id, ruleset);
-    if (!filename) return;
-    const el = this.elementsByFile.get(filename);
-    if (!el) return;
-    el.pause();
-    el.loop = false;
-  }
-
-  // Reads the engine's per-tick soundeffects bitmask (call once per
-  // doTurn(), immediately after it). One-shot bits are always fresh
-  // events (the engine clears them at the start of every doTurn — see
-  // tworld-engine/src/game.ts:80 — so no diffing is needed). Loop bits
-  // persist until explicitly cleared by game logic, so they're diffed
-  // against the previous call's bits to detect start/stop transitions.
-  sync(bits: number, ruleset: number): void {
-    for (let id = 0; id < SND_ONESHOT_COUNT; id++) {
-      if (bits & (1 << id)) this.play(id, ruleset);
+      if (isOneShot(i)) {
+        // Rising edge only: a one-shot event fires the single tick its
+        // condition becomes true, so replaying on every tick it happens to
+        // still read as set would double-trigger it.
+        if (isSet && (this.prevMask & bit) === 0) {
+          this.play(file);
+        }
+      } else {
+        if (isSet && !this.activeLoops.has(i)) {
+          const source = this.play(file);
+          if (source) {
+            source.loop = true;
+            this.activeLoops.set(i, source);
+          }
+        } else if (!isSet && this.activeLoops.has(i)) {
+          this.activeLoops.get(i)!.stop();
+          this.activeLoops.delete(i);
+        }
+      }
     }
-    for (let id = SND_ONESHOT_COUNT; id < SND_COUNT; id++) {
-      const nowOn = (bits & (1 << id)) !== 0;
-      const wasOn = (this.prevLoopBits & (1 << id)) !== 0;
-      if (nowOn && !wasOn) this.startLoop(id, ruleset);
-      else if (!nowOn && wasOn) this.stopLoop(id, ruleset);
-    }
-    this.prevLoopBits = bits & ~((1 << SND_ONESHOT_COUNT) - 1);
+    this.prevMask = mask;
   }
 
-  // Stops any lingering loop sounds and forgets loop state — call when a
-  // level (re)starts, so a loop left playing from the previous level
-  // (e.g. a block was sliding when the player hit Restart) doesn't keep
-  // playing forever.
+  // Stops any currently-looping continuous sound (skating, sliding, block
+  // pushing, ...) without touching one-shot sounds — used when the game
+  // ends so a loop that was still active doesn't keep playing forever,
+  // while letting the win/lose sound just triggered on the same tick play
+  // out normally.
+  stopLoops(): void {
+    for (const source of this.activeLoops.values()) {
+      source.stop();
+    }
+    this.activeLoops.clear();
+  }
+
+  // Stops every looping sound and clears edge-detection state; call this
+  // whenever the level restarts so a loop left over from the previous
+  // attempt doesn't bleed into the new one. One-shots are fire-and-forget
+  // nodes that finish on their own, so there's nothing to stop for them.
   reset(): void {
-    for (const el of this.elementsByFile.values()) {
-      el.pause();
-      el.loop = false;
-    }
-    this.prevLoopBits = 0;
+    this.stopLoops();
+    this.prevMask = 0;
   }
 }

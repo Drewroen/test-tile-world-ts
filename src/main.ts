@@ -13,7 +13,7 @@ import {
 } from "tworld-engine";
 import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
 import { loadTileset, drawTile, type Tileset } from "./tileset";
-import { SoundPlayer } from "./sound";
+import { SoundManager } from "./sound";
 import { getBestTime, recordTime } from "./besttime";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
@@ -26,6 +26,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#board")!;
 const ctx = canvas.getContext("2d")!;
 ctx.imageSmoothingEnabled = false;
 
+const setSelect = document.querySelector<HTMLSelectElement>("#set-select")!;
 const levelSelect = document.querySelector<HTMLSelectElement>("#level-select")!;
 const rulesetSelect = document.querySelector<HTMLSelectElement>("#ruleset-select")!;
 const viewportSelect = document.querySelector<HTMLSelectElement>("#viewport-select")!;
@@ -42,6 +43,36 @@ const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
 const bestTimeEl = document.querySelector<HTMLElement>("#best-time")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
 const hintPanelEl = document.querySelector<HTMLElement>("#hint-panel")!;
+const setStatusEl = document.querySelector<HTMLElement>("#set-status")!;
+
+// Gliderbot's public mirror of the official CC1 level sets. It's a plain
+// directory listing (Apache/nginx autoindex), so the set list is scraped
+// by pulling out every <a href> that points at a .dat file rather than
+// relying on any particular page layout.
+const CC1_SETS_INDEX_URL = "https://bitbusters.club/gliderbot/sets/cc1/";
+
+interface DatSet {
+  name: string;
+  url: string;
+}
+
+async function fetchAvailableSets(): Promise<DatSet[]> {
+  const res = await fetch(CC1_SETS_INDEX_URL);
+  if (!res.ok) throw new Error(`Failed to load set list (HTTP ${res.status})`);
+  const html = await res.text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  const sets: DatSet[] = [];
+  for (const anchor of Array.from(doc.querySelectorAll("a[href]"))) {
+    const href = anchor.getAttribute("href") ?? "";
+    if (!/\.dat$/i.test(href)) continue;
+    const url = new URL(href, CC1_SETS_INDEX_URL).toString();
+    const name = decodeURIComponent(href).replace(/\.dat$/i, "");
+    sets.push({ name, url });
+  }
+  sets.sort((a, b) => a.name.localeCompare(b.name));
+  return sets;
+}
 
 const ICON_SIZE = 24;
 const KEY_TILES = [Tile.Key_Red, Tile.Key_Blue, Tile.Key_Yellow, Tile.Key_Green];
@@ -62,16 +93,16 @@ let levels: GameSetup[] = [];
 let game: Game | null = null;
 let tickHandle: number | undefined;
 let tileset: Tileset | null = null;
+const sound = new SoundManager(import.meta.env.BASE_URL);
 // The level timer/tick loop shouldn't run until the player makes their
 // first move (matches Tile World's behavior of not starting the clock
 // on level load).
 let gameStarted = false;
-let soundPlayer: SoundPlayer | null = null;
 
 function ensureStarted(): void {
+  sound.resume();
   if (gameStarted || !game) return;
   gameStarted = true;
-  soundPlayer?.unlock();
   tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
 }
 
@@ -151,10 +182,10 @@ function startLevel(index: number): void {
     clearInterval(tickHandle);
     tickHandle = undefined;
   }
-  soundPlayer?.reset();
   heldDirs.clear();
   touchDirs.clear();
   gameStarted = false;
+  sound.reset();
   statusEl.textContent = "";
   statusEl.className = "status";
 
@@ -173,7 +204,7 @@ function startLevel(index: number): void {
 function tick(): void {
   if (!game) return;
   const result = game.doTurn(currentInputCommand());
-  soundPlayer?.sync(game.getSoundEffects(), currentRuleset());
+  sound.update(game.getSoundEffects(), currentRuleset());
   render();
 
   if (result !== 0) {
@@ -181,8 +212,9 @@ function tick(): void {
       clearInterval(tickHandle);
       tickHandle = undefined;
     }
+    sound.stopLoops();
     statusEl.textContent = result > 0 ? "You win!" : "You lose.";
-    statusEl.className = `status ${result > 0 ? "win" : "lose"}`;
+    statusEl.className = `status ${result > 0 ? "win" : "lose"} status-pop`;
     if (result > 0 && game) {
       const setup = levels[Number(levelSelect.value)];
       if (setup) {
@@ -219,7 +251,29 @@ function render(): void {
   ctx.imageSmoothingEnabled = false;
 
   drawBoard(ctx, tileset, state.map, viewport, cellSize);
-  drawCreatureOverlay(ctx, tileset, game.getCreatures(), viewport, cellSize);
+  // getCreatures() now returns real per-tick data under both rulesets
+  // (tworld-engine's MsLogic.activeCreatures() is a passthrough of
+  // state.creatures, mirroring Lynx). MS bakes Chip's sprite directly into
+  // the map cell every tick, including swapping in the drowned/burned/
+  // exited sprite once chipstatus reflects it (see tworld-engine's
+  // updateCreature) — so drawBoard above already shows the right thing at
+  // Chip's tile. But the creature list still carries Chip as a live,
+  // non-hidden entry with his bare directional sprite, since MS never
+  // marks him hidden on death the way Lynx does. Drawing him again here
+  // would paint that plain sprite right over the correctly-baked death
+  // tile, hiding it. 0 = CHIP_OKAY, 6 = CHIP_SQUISHED (not yet a loss) —
+  // anything else means Chip is dead and should be left to the map tile
+  // alone.
+  const creatures = game.getCreatures();
+  const msChipIsDead =
+    state.ruleset === Ruleset.MS && state.msstate.chipstatus !== 0 && state.msstate.chipstatus !== 6;
+  drawCreatureOverlay(
+    ctx,
+    tileset,
+    msChipIsDead ? creatures.filter((cr) => cr.id !== Tile.Chip) : creatures,
+    viewport,
+    cellSize,
+  );
 
   chipsNeededEl.textContent = String(state.chipsneeded);
   const secondsLeft = state.timelimit
@@ -246,28 +300,48 @@ function render(): void {
   hintPanelEl.textContent = showHint ? state.hinttext : "";
 }
 
+async function loadSet(url: string): Promise<void> {
+  setSelect.disabled = true;
+  levelSelect.disabled = true;
+  setStatusEl.textContent = "Loading set…";
+  setStatusEl.className = "set-status";
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    levels = splitDatFile(bytes).levels;
+
+    levelSelect.innerHTML = "";
+    levels.forEach((level, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = `#${level.number} ${level.name || "(untitled)"}`;
+      levelSelect.appendChild(opt);
+    });
+
+    setStatusEl.textContent = "";
+    startLevel(0);
+  } catch (err) {
+    setStatusEl.textContent = `Failed to load set: ${(err as Error).message}`;
+    setStatusEl.className = "set-status error";
+  } finally {
+    setSelect.disabled = false;
+    levelSelect.disabled = false;
+  }
+}
+
 async function main(): Promise<void> {
   const base = import.meta.env.BASE_URL;
+  const defaultSetUrl = `${base}intro.dat`;
+  sound.preload();
   tileset = await loadTileset(`${base}tiles.bmp`);
-  soundPlayer = await SoundPlayer.load(base);
-
-  const res = await fetch(`${base}intro.dat`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const parsed = splitDatFile(bytes);
-  levels = parsed.levels;
-
-  levelSelect.innerHTML = "";
-  levels.forEach((level, i) => {
-    const opt = document.createElement("option");
-    opt.value = String(i);
-    opt.textContent = `#${level.number} ${level.name || "(untitled)"}`;
-    levelSelect.appendChild(opt);
-  });
 
   levelSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
   rulesetSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
   viewportSelect.addEventListener("change", render);
   restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
+  setSelect.addEventListener("change", () => loadSet(setSelect.value || defaultSetUrl));
   fullscreenBtn.addEventListener("click", () => {
     if (document.fullscreenElement) {
       document.exitFullscreen();
@@ -293,7 +367,23 @@ async function main(): Promise<void> {
     if (e.key === "Enter") goToPassword();
   });
 
-  startLevel(0);
+  await loadSet(defaultSetUrl);
+
+  // Populate the set picker with the CC1 sets mirrored at bitbusters.club in
+  // the background; the default intro.dat is already playable above.
+  try {
+    const sets = await fetchAvailableSets();
+    for (const set of sets) {
+      const opt = document.createElement("option");
+      opt.value = set.url;
+      opt.textContent = set.name;
+      setSelect.appendChild(opt);
+    }
+  } catch (err) {
+    console.error("Failed to load CC1 set list", err);
+    setStatusEl.textContent = `Couldn't load the set list from bitbusters.club: ${(err as Error).message}`;
+    setStatusEl.className = "set-status error";
+  }
 }
 
 main().catch((err) => {
