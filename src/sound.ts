@@ -94,37 +94,58 @@ function isOneShot(index: number): boolean {
 
 export class SoundManager {
   private base: string;
-  private audio = new Map<string, HTMLAudioElement>();
-  private activeLoops = new Set<number>();
+  // HTMLAudioElement.play() carries its own internal scheduling/decode
+  // latency in the browser's media pipeline — noticeable (tens of ms) even
+  // once the file is fully buffered. Decoding every sound into a raw
+  // AudioBuffer up front and firing it through an AudioBufferSourceNode
+  // instead plays back sample-accurately with none of that overhead, which
+  // is what actually gets a pickup/bump sound to feel instant.
+  private ctx: AudioContext;
+  private buffers = new Map<string, AudioBuffer>();
+  private activeLoops = new Map<number, AudioBufferSourceNode>();
   private prevMask = 0;
   muted = false;
 
   constructor(base: string) {
     this.base = base;
+    this.ctx = new AudioContext();
   }
 
-  private elementFor(file: string): HTMLAudioElement {
-    let el = this.audio.get(file);
-    if (!el) {
-      el = new Audio(`${this.base}sounds/${file}`);
-      el.preload = "auto";
-      this.audio.set(file, el);
-    }
-    return el;
+  private async loadBuffer(file: string): Promise<void> {
+    if (this.buffers.has(file)) return;
+    const res = await fetch(`${this.base}sounds/${file}`);
+    const data = await res.arrayBuffer();
+    const buffer = await this.ctx.decodeAudioData(data);
+    this.buffers.set(file, buffer);
   }
 
-  // Creates every sound's <audio> element and starts buffering it up front.
-  // Without this, elementFor() only creates (and starts fetching) an
-  // element the first time that particular sound is actually needed —
-  // which for an infrequent one like the "bump into wall" sound meant the
-  // very first bump had to wait on a network fetch before anything played,
-  // showing up as a noticeable delay between the bump and its sound. Call
-  // this once at startup so every sound is already buffered by the time
-  // it's first triggered.
+  // Decodes every sound up front so the very first time an event fires,
+  // its buffer is already sitting in memory ready to play — without this,
+  // an infrequent sound (e.g. bumping a wall) would have to fetch and
+  // decode its file before anything could play, showing up as a
+  // noticeable delay between the action and the sound.
   preload(): void {
     for (const file of ALL_FILES) {
-      this.elementFor(file);
+      void this.loadBuffer(file);
     }
+  }
+
+  // AudioContexts start (or get force-suspended by the browser's autoplay
+  // policy) in a "suspended" state until a user gesture resumes them;
+  // call this from the same input handlers that already gate game start
+  // on a first keypress/tap so sounds aren't silently dropped.
+  resume(): void {
+    if (this.ctx.state === "suspended") void this.ctx.resume();
+  }
+
+  private play(file: string): AudioBufferSourceNode | undefined {
+    const buffer = this.buffers.get(file);
+    if (!buffer) return undefined;
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.ctx.destination);
+    source.start();
+    return source;
   }
 
   update(mask: number, ruleset: Ruleset): void {
@@ -143,19 +164,17 @@ export class SoundManager {
         // condition becomes true, so replaying on every tick it happens to
         // still read as set would double-trigger it.
         if (isSet && (this.prevMask & bit) === 0) {
-          const el = this.elementFor(file);
-          el.currentTime = 0;
-          void el.play().catch(() => {});
+          this.play(file);
         }
       } else {
         if (isSet && !this.activeLoops.has(i)) {
-          const el = this.elementFor(file);
-          el.loop = true;
-          el.currentTime = 0;
-          void el.play().catch(() => {});
-          this.activeLoops.add(i);
+          const source = this.play(file);
+          if (source) {
+            source.loop = true;
+            this.activeLoops.set(i, source);
+          }
         } else if (!isSet && this.activeLoops.has(i)) {
-          this.elementFor(file).pause();
+          this.activeLoops.get(i)!.stop();
           this.activeLoops.delete(i);
         }
       }
@@ -169,22 +188,18 @@ export class SoundManager {
   // while letting the win/lose sound just triggered on the same tick play
   // out normally.
   stopLoops(): void {
-    for (const i of this.activeLoops) {
-      const file = soundFile(i, Ruleset.Lynx) ?? soundFile(i, Ruleset.MS);
-      if (file) this.elementFor(file).pause();
+    for (const source of this.activeLoops.values()) {
+      source.stop();
     }
     this.activeLoops.clear();
   }
 
-  // Stops every sound outright (including one-shots) and clears
-  // edge-detection state; call this whenever the level restarts so a sound
-  // left over from the previous attempt doesn't bleed into the new one.
+  // Stops every looping sound and clears edge-detection state; call this
+  // whenever the level restarts so a loop left over from the previous
+  // attempt doesn't bleed into the new one. One-shots are fire-and-forget
+  // nodes that finish on their own, so there's nothing to stop for them.
   reset(): void {
-    for (const el of this.audio.values()) {
-      el.pause();
-      el.currentTime = 0;
-    }
-    this.activeLoops.clear();
+    this.stopLoops();
     this.prevMask = 0;
   }
 }
