@@ -73,7 +73,15 @@ function diridx(dir: number): number {
   return (0x30210 >> (dir * 2)) & 3;
 }
 
+// Water_Splash/Bomb_Explosion/Entity_Explosion (lxlogic.c's death-animation
+// pseudo-creatures, reused from a dying creature's slot — see
+// tworld-engine's lynx.ts removeCreature()) have no per-direction sprite
+// variants, unlike every real creature id. OR-ing in a stale leftover `dir`
+// would silently change which of the three (numerically adjacent) ids gets
+// looked up, or land on an id with no sprite at all. Skip the packing for
+// any id at or past that boundary.
 function packedCreatureTile(cr: { id: number; dir: number }): number {
+  if (cr.id >= Tile.Water_Splash) return cr.id;
   return cr.id | diridx(cr.dir);
 }
 
