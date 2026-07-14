@@ -235,10 +235,24 @@ function render(): void {
   // monsters) under both rulesets, so fall back to that full list rather
   // than just Chip alone to keep monsters visible under MS.
   const creatures = game.getCreatures();
+  const overlayCreatures = creatures.length > 0 ? creatures : state.creatures;
+  // MS bakes Chip's sprite directly into the map cell every tick,
+  // including swapping in the drowned/burned/exited sprite once
+  // chipstatus reflects it (see tworld-engine's updateCreature) — so
+  // drawBoard above already shows the right thing at Chip's tile. But
+  // state.creatures (the fallback list used above) still carries Chip as
+  // a live, non-hidden entry with his bare directional sprite, since MS
+  // never marks him hidden on death the way Lynx does. Drawing him again
+  // here would paint that plain sprite right over the correctly-baked
+  // death tile, hiding it. 0 = CHIP_OKAY, 6 = CHIP_SQUISHED (not yet a
+  // loss) — anything else means Chip is dead and should be left to the
+  // map tile alone.
+  const msChipIsDead =
+    state.ruleset === Ruleset.MS && state.msstate.chipstatus !== 0 && state.msstate.chipstatus !== 6;
   drawCreatureOverlay(
     ctx,
     tileset,
-    creatures.length > 0 ? creatures : state.creatures,
+    msChipIsDead ? overlayCreatures.filter((cr) => cr.id !== Tile.Chip) : overlayCreatures,
     viewport,
     cellSize,
   );
@@ -298,6 +312,7 @@ async function loadSet(url: string): Promise<void> {
 async function main(): Promise<void> {
   const base = import.meta.env.BASE_URL;
   const defaultSetUrl = `${base}intro.dat`;
+  sound.preload();
   tileset = await loadTileset(`${base}tiles.bmp`);
 
   levelSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
