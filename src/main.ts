@@ -32,6 +32,8 @@ const restartBtn = document.querySelector<HTMLButtonElement>("#restart-btn")!;
 const passwordInput = document.querySelector<HTMLInputElement>("#password-input")!;
 const passwordGoBtn = document.querySelector<HTMLButtonElement>("#password-go-btn")!;
 const passwordErrorEl = document.querySelector<HTMLElement>("#password-error")!;
+const gameAreaEl = document.querySelector<HTMLDivElement>("#game-area")!;
+const fullscreenBtn = document.querySelector<HTMLButtonElement>("#fullscreen-btn")!;
 const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
 const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
@@ -252,6 +254,13 @@ async function main(): Promise<void> {
   rulesetSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
   viewportSelect.addEventListener("change", render);
   restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
+  fullscreenBtn.addEventListener("click", () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      gameAreaEl.requestFullscreen();
+    }
+  });
 
   function goToPassword(): void {
     // tworld/series.c looks up a level by password with a case-sensitive
