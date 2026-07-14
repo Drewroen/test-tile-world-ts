@@ -133,6 +133,11 @@ canvas {
   font-size: 0.8rem;
 }
 
+.password-error {
+  color: #c62828;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 640px) {
   body {
     padding: 0;

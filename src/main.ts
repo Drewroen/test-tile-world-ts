@@ -29,6 +29,9 @@ const levelSelect = document.querySelector<HTMLSelectElement>("#level-select")!;
 const rulesetSelect = document.querySelector<HTMLSelectElement>("#ruleset-select")!;
 const viewportSelect = document.querySelector<HTMLSelectElement>("#viewport-select")!;
 const restartBtn = document.querySelector<HTMLButtonElement>("#restart-btn")!;
+const passwordInput = document.querySelector<HTMLInputElement>("#password-input")!;
+const passwordGoBtn = document.querySelector<HTMLButtonElement>("#password-go-btn")!;
+const passwordErrorEl = document.querySelector<HTMLElement>("#password-error")!;
 const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
 const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
@@ -249,6 +252,23 @@ async function main(): Promise<void> {
   rulesetSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
   viewportSelect.addEventListener("change", render);
   restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
+
+  function goToPassword(): void {
+    // tworld/series.c looks up a level by password with a case-sensitive
+    // strcmp, so this matches that exactly rather than lowercasing input.
+    const index = levels.findIndex((lvl) => lvl.passwd === passwordInput.value.trim());
+    if (index < 0) {
+      passwordErrorEl.textContent = "No level with that password.";
+      return;
+    }
+    passwordErrorEl.textContent = "";
+    levelSelect.value = String(index);
+    startLevel(index);
+  }
+  passwordGoBtn.addEventListener("click", goToPassword);
+  passwordInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") goToPassword();
+  });
 
   startLevel(0);
 }
