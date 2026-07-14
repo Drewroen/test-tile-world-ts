@@ -91,6 +91,7 @@ const sound = new SoundManager(import.meta.env.BASE_URL);
 let gameStarted = false;
 
 function ensureStarted(): void {
+  sound.resume();
   if (gameStarted || !game) return;
   gameStarted = true;
   tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
