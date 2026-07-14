@@ -76,6 +76,10 @@ function soundFile(index: number, ruleset: Ruleset): string | undefined {
   return table[index] ?? SHARED[index];
 }
 
+const ALL_FILES = Array.from(
+  new Set([...Object.values(SHARED), ...Object.values(MS), ...Object.values(LYNX)].filter((f): f is string => !!f)),
+);
+
 // SND indices below this threshold are one-shot effects (played from the
 // start each time the bit turns on); the rest are continuous/looping sounds
 // tied to an ongoing action (skating, sliding, block pushing, ...) that
@@ -103,9 +107,24 @@ export class SoundManager {
     let el = this.audio.get(file);
     if (!el) {
       el = new Audio(`${this.base}sounds/${file}`);
+      el.preload = "auto";
       this.audio.set(file, el);
     }
     return el;
+  }
+
+  // Creates every sound's <audio> element and starts buffering it up front.
+  // Without this, elementFor() only creates (and starts fetching) an
+  // element the first time that particular sound is actually needed —
+  // which for an infrequent one like the "bump into wall" sound meant the
+  // very first bump had to wait on a network fetch before anything played,
+  // showing up as a noticeable delay between the bump and its sound. Call
+  // this once at startup so every sound is already buffered by the time
+  // it's first triggered.
+  preload(): void {
+    for (const file of ALL_FILES) {
+      this.elementFor(file);
+    }
   }
 
   update(mask: number, ruleset: Ruleset): void {
