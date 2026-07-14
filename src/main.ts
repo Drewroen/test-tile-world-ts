@@ -226,13 +226,14 @@ function render(): void {
   drawBoard(ctx, tileset, state.map, viewport, cellSize);
   // getCreatures() only has data for rulesets whose logic tracks an active
   // creature list (Lynx); MS's logic doesn't expose one, so it always
-  // returns []. Chip himself is always state.creatures[0] regardless of
-  // ruleset, so fall back to that to keep the player visible under MS.
+  // returns []. state.creatures itself holds every creature (Chip plus all
+  // monsters) under both rulesets, so fall back to that full list rather
+  // than just Chip alone to keep monsters visible under MS.
   const creatures = game.getCreatures();
   drawCreatureOverlay(
     ctx,
     tileset,
-    creatures.length > 0 ? creatures : [state.creatures[0]],
+    creatures.length > 0 ? creatures : state.creatures,
     viewport,
     cellSize,
   );
