@@ -425,8 +425,21 @@ async function main(): Promise<void> {
   });
   window.addEventListener("hashchange", handleRouteChange);
 
-  await refreshAvailableSets();
+  // Render immediately with whatever's already in availableSets (at minimum
+  // INTRO_SET, which needs no network access) so the sets page and any
+  // deep link to a locally-bundled set resolve without waiting on the
+  // bitbusters.club fetch below. If the initial route names a set that
+  // isn't resolvable yet (a network-only set not yet fetched), re-dispatch
+  // once the fetch settles — but only then, so an already-loaded game
+  // (e.g. Intro) doesn't get needlessly reloaded a second time.
+  renderSetsList();
+  const initialRoute = parseHash(location.hash);
+  const resolvedImmediately =
+    !initialRoute || availableSets.some((s) => s.id === initialRoute.setId);
   handleRouteChange();
+
+  await refreshAvailableSets();
+  if (!resolvedImmediately) handleRouteChange();
 }
 
 main().catch((err) => {
