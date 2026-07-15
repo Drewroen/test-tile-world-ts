@@ -8,87 +8,68 @@
   </head>
   <body>
     <div id="app">
-      <h1>tworld-engine demo</h1>
-      <p class="subtitle">
-        A TypeScript port of the Tile World (Chip's Challenge) game logic —
-        playing <code>intro.dat</code> live in the browser.
-      </p>
-
-      <div class="toolbar">
-        <label>
-          Set:
-          <select id="set-select">
-            <option value="">Intro (default)</option>
-          </select>
-        </label>
-        <label>
-          Level:
-          <select id="level-select"></select>
-        </label>
-        <label>
-          Password:
-          <input id="password-input" type="text" maxlength="4" placeholder="e.g. BLIH" />
-        </label>
-        <button id="password-go-btn">Go</button>
-        <span id="password-error" class="password-error"></span>
-        <label>
-          Ruleset:
-          <select id="ruleset-select">
-            <option value="lynx">Lynx</option>
-            <option value="ms" selected>MS</option>
-          </select>
-        </label>
-        <label>
-          View:
-          <select id="viewport-select">
-            <option value="full">Full map</option>
-            <option value="traditional" selected>Traditional (9x9)</option>
-          </select>
-        </label>
-        <button id="restart-btn">Restart</button>
-        <button id="fullscreen-btn">Fullscreen</button>
+      <div id="sets-page">
+        <h1>tworld-engine demo</h1>
+        <p class="subtitle">
+          A TypeScript port of the Tile World (Chip's Challenge) game logic
+          — pick a set to play in the browser.
+        </p>
+        <div id="sets-status" class="set-status"></div>
+        <ul id="sets-list" class="sets-list"></ul>
       </div>
-      <div id="set-status" class="set-status"></div>
 
-      <div class="game-area" id="game-area">
-        <canvas id="board" width="512" height="512"></canvas>
-        <div class="hud">
-          <div class="panel-title">
-            <div id="level-name">—</div>
-            <div id="level-password" class="password"></div>
-          </div>
-          <div class="panel-row stats">
-            <div class="stat">
-              <span class="label">Chips</span>
-              <span id="chips-needed">0</span>
+      <div id="game-page" class="hidden">
+        <div class="toolbar">
+          <button id="back-to-sets-btn">&larr; Sets</button>
+          <label>
+            Level:
+            <select id="level-select"></select>
+          </label>
+          <span id="ruleset-readout" class="ruleset-readout"></span>
+          <button id="restart-btn">Restart</button>
+        </div>
+        <div id="set-status" class="set-status"></div>
+
+        <div class="game-area" id="game-area">
+          <canvas id="board" width="512" height="512"></canvas>
+          <div class="hud">
+            <div class="panel-title">
+              <div id="level-name">—</div>
+              <div id="level-password" class="password"></div>
             </div>
-            <div class="stat">
-              <span class="label">Time</span>
-              <span id="time-left">—</span>
+            <div class="panel-row stats">
+              <div class="stat">
+                <span class="label">Chips</span>
+                <span id="chips-needed">0</span>
+              </div>
+              <div class="stat">
+                <span class="label">Time</span>
+                <span id="time-left">—</span>
+              </div>
+              <div class="stat">
+                <span class="label">Best</span>
+                <span id="best-time">—</span>
+              </div>
             </div>
-            <div class="stat">
-              <span class="label">Best</span>
-              <span id="best-time">—</span>
+            <div class="panel-row inventory">
+              <canvas class="icon-slot" id="key-0" width="24" height="24"></canvas>
+              <canvas class="icon-slot" id="key-1" width="24" height="24"></canvas>
+              <canvas class="icon-slot" id="key-2" width="24" height="24"></canvas>
+              <canvas class="icon-slot" id="key-3" width="24" height="24"></canvas>
             </div>
+            <div class="panel-row inventory">
+              <canvas class="icon-slot" id="boot-0" width="24" height="24"></canvas>
+              <canvas class="icon-slot" id="boot-1" width="24" height="24"></canvas>
+              <canvas class="icon-slot" id="boot-2" width="24" height="24"></canvas>
+              <canvas class="icon-slot" id="boot-3" width="24" height="24"></canvas>
+            </div>
+            <div id="hint-panel" class="hint-panel"></div>
+            <div id="status" class="status"></div>
+            <p class="hint">
+              Use arrow keys to move (click the board first), or on mobile tap
+              the top/left/right/bottom of the board.
+            </p>
           </div>
-          <div class="panel-row inventory">
-            <canvas class="icon-slot" id="key-0" width="24" height="24"></canvas>
-            <canvas class="icon-slot" id="key-1" width="24" height="24"></canvas>
-            <canvas class="icon-slot" id="key-2" width="24" height="24"></canvas>
-            <canvas class="icon-slot" id="key-3" width="24" height="24"></canvas>
-          </div>
-          <div class="panel-row inventory">
-            <canvas class="icon-slot" id="boot-0" width="24" height="24"></canvas>
-            <canvas class="icon-slot" id="boot-1" width="24" height="24"></canvas>
-            <canvas class="icon-slot" id="boot-2" width="24" height="24"></canvas>
-            <canvas class="icon-slot" id="boot-3" width="24" height="24"></canvas>
-          </div>
-          <div id="hint-panel" class="hint-panel"></div>
-          <div id="status" class="status"></div>
-          <p class="hint">
-            Use arrow keys to move (click the board first), or on mobile tap
-            the top/left/right/bottom of the board.
-          </p>
         </div>
       </div>
     </div>
