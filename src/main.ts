@@ -11,10 +11,11 @@ import {
   SF_SHOWHINT,
   type GameSetup,
 } from "tworld-engine";
-import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE, type ViewportMode } from "./render";
+import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONAL_SIZE } from "./render";
 import { loadTileset, drawTile, type Tileset } from "./tileset";
 import { SoundManager } from "./sound";
 import { getBestTime, recordTime } from "./besttime";
+import { parseHash, buildHash, type RulesetSlug } from "./routing";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -26,16 +27,15 @@ const canvas = document.querySelector<HTMLCanvasElement>("#board")!;
 const ctx = canvas.getContext("2d")!;
 ctx.imageSmoothingEnabled = false;
 
-const setSelect = document.querySelector<HTMLSelectElement>("#set-select")!;
+const setsPageEl = document.querySelector<HTMLDivElement>("#sets-page")!;
+const gamePageEl = document.querySelector<HTMLDivElement>("#game-page")!;
+const setsListEl = document.querySelector<HTMLUListElement>("#sets-list")!;
+const setsStatusEl = document.querySelector<HTMLElement>("#sets-status")!;
+const backToSetsBtn = document.querySelector<HTMLButtonElement>("#back-to-sets-btn")!;
+const rulesetReadoutEl = document.querySelector<HTMLElement>("#ruleset-readout")!;
+
 const levelSelect = document.querySelector<HTMLSelectElement>("#level-select")!;
-const rulesetSelect = document.querySelector<HTMLSelectElement>("#ruleset-select")!;
-const viewportSelect = document.querySelector<HTMLSelectElement>("#viewport-select")!;
 const restartBtn = document.querySelector<HTMLButtonElement>("#restart-btn")!;
-const passwordInput = document.querySelector<HTMLInputElement>("#password-input")!;
-const passwordGoBtn = document.querySelector<HTMLButtonElement>("#password-go-btn")!;
-const passwordErrorEl = document.querySelector<HTMLElement>("#password-error")!;
-const gameAreaEl = document.querySelector<HTMLDivElement>("#game-area")!;
-const fullscreenBtn = document.querySelector<HTMLButtonElement>("#fullscreen-btn")!;
 const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
 const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
@@ -52,9 +52,20 @@ const setStatusEl = document.querySelector<HTMLElement>("#set-status")!;
 const CC1_SETS_INDEX_URL = "https://bitbusters.club/gliderbot/sets/cc1/";
 
 interface DatSet {
+  id: string;
   name: string;
   url: string;
 }
+
+// Bundled locally (public/intro.dat) rather than fetched from the network,
+// so it's always in availableSets — even before (or if) the bitbusters.club
+// fetch below completes — which lets "#/Intro/ms" resolve immediately on a
+// fresh page load.
+const INTRO_SET: DatSet = {
+  id: "Intro",
+  name: "Intro (default)",
+  url: `${import.meta.env.BASE_URL}intro.dat`,
+};
 
 async function fetchAvailableSets(): Promise<DatSet[]> {
   const res = await fetch(CC1_SETS_INDEX_URL);
@@ -68,7 +79,7 @@ async function fetchAvailableSets(): Promise<DatSet[]> {
     if (!/\.dat$/i.test(href)) continue;
     const url = new URL(href, CC1_SETS_INDEX_URL).toString();
     const name = decodeURIComponent(href).replace(/\.dat$/i, "");
-    sets.push({ name, url });
+    sets.push({ id: name, name, url });
   }
   sets.sort((a, b) => a.name.localeCompare(b.name));
   return sets;
@@ -99,11 +110,27 @@ const sound = new SoundManager(import.meta.env.BASE_URL);
 // on level load).
 let gameStarted = false;
 
+// Populated once at startup (or left as just [INTRO_SET] if the network
+// fetch fails) and reused both to render the sets page and to resolve a
+// setId parsed out of the URL hash back into a downloadable .dat URL.
+let availableSets: DatSet[] = [INTRO_SET];
+let currentRulesetSlug: RulesetSlug = "ms";
+
 function ensureStarted(): void {
   sound.resume();
   if (gameStarted || !game) return;
   gameStarted = true;
   tickHandle = window.setInterval(tick, 1000 / TICKS_PER_SECOND);
+}
+
+function stopGame(): void {
+  if (tickHandle !== undefined) {
+    clearInterval(tickHandle);
+    tickHandle = undefined;
+  }
+  gameStarted = false;
+  heldDirs.clear();
+  touchDirs.clear();
 }
 
 const KEY_TO_DIR: Record<string, number> = {
@@ -170,21 +197,11 @@ function currentInputCommand(): number {
 }
 
 function currentRuleset(): number {
-  return rulesetSelect.value === "ms" ? Ruleset.MS : Ruleset.Lynx;
-}
-
-function currentViewportMode(): ViewportMode {
-  return viewportSelect.value === "traditional" ? "traditional" : "full";
+  return currentRulesetSlug === "ms" ? Ruleset.MS : Ruleset.Lynx;
 }
 
 function startLevel(index: number): void {
-  if (tickHandle !== undefined) {
-    clearInterval(tickHandle);
-    tickHandle = undefined;
-  }
-  heldDirs.clear();
-  touchDirs.clear();
-  gameStarted = false;
+  stopGame();
   sound.reset();
   statusEl.textContent = "";
   statusEl.className = "status";
@@ -235,19 +252,16 @@ function render(): void {
   // units (ported directly from the engine's own prepareDisplay logic),
   // updated continuously by the engine during movement. computeViewport
   // uses them directly so the traditional view scrolls smoothly instead
-  // of snapping a full tile at a time.
-  const mode = currentViewportMode();
-  const viewport = computeViewport(mode, state.xviewpos, state.yviewpos);
-  const cellSize = CELL_SIZES[mode];
+  // of snapping a full tile at a time. The view is always 9x9
+  // ("traditional") now — there's no view-size picker anymore.
+  const viewport = computeViewport("traditional", state.xviewpos, state.yviewpos);
+  const cellSize = CELL_SIZES.traditional;
 
-  // The canvas is always sized to exactly the visible window
-  // (TRADITIONAL_SIZE tiles, or the whole GRID in full mode); the
+  // The canvas is always sized to exactly the visible 9x9 window; the
   // viewport itself may be one tile wider/taller than that to supply a
   // scroll buffer (see computeViewport), which the canvas clips off.
-  const displayCols = mode === "full" ? viewport.width : TRADITIONAL_SIZE;
-  const displayRows = mode === "full" ? viewport.height : TRADITIONAL_SIZE;
-  canvas.width = displayCols * cellSize;
-  canvas.height = displayRows * cellSize;
+  canvas.width = TRADITIONAL_SIZE * cellSize;
+  canvas.height = TRADITIONAL_SIZE * cellSize;
   ctx.imageSmoothingEnabled = false;
 
   drawBoard(ctx, tileset, state.map, viewport, cellSize);
@@ -301,7 +315,6 @@ function render(): void {
 }
 
 async function loadSet(url: string): Promise<void> {
-  setSelect.disabled = true;
   levelSelect.disabled = true;
   setStatusEl.textContent = "Loading set…";
   setStatusEl.className = "set-status";
@@ -326,64 +339,94 @@ async function loadSet(url: string): Promise<void> {
     setStatusEl.textContent = `Failed to load set: ${(err as Error).message}`;
     setStatusEl.className = "set-status error";
   } finally {
-    setSelect.disabled = false;
     levelSelect.disabled = false;
   }
 }
 
-async function main(): Promise<void> {
-  const base = import.meta.env.BASE_URL;
-  const defaultSetUrl = `${base}intro.dat`;
-  sound.preload();
-  tileset = await loadTileset(`${base}tiles.bmp`);
+function renderSetsList(): void {
+  setsListEl.innerHTML = "";
+  for (const set of availableSets) {
+    const row = document.createElement("li");
+    row.className = "set-row";
 
-  levelSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
-  rulesetSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
-  viewportSelect.addEventListener("change", render);
-  restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
-  setSelect.addEventListener("change", () => loadSet(setSelect.value || defaultSetUrl));
-  fullscreenBtn.addEventListener("click", () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      gameAreaEl.requestFullscreen();
-    }
-  });
+    const nameEl = document.createElement("span");
+    nameEl.className = "set-name";
+    nameEl.textContent = set.name;
+    row.appendChild(nameEl);
 
-  function goToPassword(): void {
-    // tworld/series.c looks up a level by password with a case-sensitive
-    // strcmp, so this matches that exactly rather than lowercasing input.
-    const index = levels.findIndex((lvl) => lvl.passwd === passwordInput.value.trim());
-    if (index < 0) {
-      passwordErrorEl.textContent = "No level with that password.";
-      return;
+    const actions = document.createElement("div");
+    actions.className = "set-actions";
+    for (const ruleset of ["ms", "lynx"] as const) {
+      const btn = document.createElement("button");
+      btn.textContent = ruleset === "ms" ? "MS" : "Lynx";
+      btn.addEventListener("click", () => {
+        location.hash = buildHash(set.id, ruleset);
+      });
+      actions.appendChild(btn);
     }
-    passwordErrorEl.textContent = "";
-    levelSelect.value = String(index);
-    startLevel(index);
+    row.appendChild(actions);
+
+    setsListEl.appendChild(row);
   }
-  passwordGoBtn.addEventListener("click", goToPassword);
-  passwordInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") goToPassword();
-  });
+}
 
-  await loadSet(defaultSetUrl);
-
-  // Populate the set picker with the CC1 sets mirrored at bitbusters.club in
-  // the background; the default intro.dat is already playable above.
+async function refreshAvailableSets(): Promise<void> {
   try {
     const sets = await fetchAvailableSets();
-    for (const set of sets) {
-      const opt = document.createElement("option");
-      opt.value = set.url;
-      opt.textContent = set.name;
-      setSelect.appendChild(opt);
-    }
+    availableSets = [INTRO_SET, ...sets];
+    setsStatusEl.textContent = "";
+    setsStatusEl.className = "set-status";
   } catch (err) {
     console.error("Failed to load CC1 set list", err);
-    setStatusEl.textContent = `Couldn't load the set list from bitbusters.club: ${(err as Error).message}`;
-    setStatusEl.className = "set-status error";
+    setsStatusEl.textContent = `Couldn't load the set list from bitbusters.club: ${(err as Error).message}`;
+    setsStatusEl.className = "set-status error";
   }
+  renderSetsList();
+}
+
+function showSetsPage(): void {
+  stopGame();
+  gamePageEl.classList.add("hidden");
+  setsPageEl.classList.remove("hidden");
+}
+
+async function showGamePage(setId: string, ruleset: RulesetSlug): Promise<void> {
+  setsPageEl.classList.add("hidden");
+  gamePageEl.classList.remove("hidden");
+  currentRulesetSlug = ruleset;
+  rulesetReadoutEl.textContent = ruleset === "ms" ? "Ruleset: MS" : "Ruleset: Lynx";
+
+  const set = availableSets.find((s) => s.id === setId);
+  if (!set) {
+    setStatusEl.textContent = `Unknown set: ${setId}`;
+    setStatusEl.className = "set-status error";
+    return;
+  }
+  await loadSet(set.url);
+}
+
+function handleRouteChange(): void {
+  const route = parseHash(location.hash);
+  if (route) {
+    showGamePage(route.setId, route.ruleset);
+  } else {
+    showSetsPage();
+  }
+}
+
+async function main(): Promise<void> {
+  tileset = await loadTileset(`${import.meta.env.BASE_URL}tiles.bmp`);
+  sound.preload();
+
+  levelSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
+  restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
+  backToSetsBtn.addEventListener("click", () => {
+    location.hash = "";
+  });
+  window.addEventListener("hashchange", handleRouteChange);
+
+  await refreshAvailableSets();
+  handleRouteChange();
 }
 
 main().catch((err) => {
