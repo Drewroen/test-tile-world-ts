@@ -15,9 +15,10 @@ npm install       # install deps (tworld-engine is a GitHub dependency, no npm r
 npm run dev       # start Vite dev server
 npm run build     # type-check-free production build to dist/ (vite build)
 npm run preview   # serve the built dist/ locally
+npm test          # run the vitest unit test suite (vitest run)
 ```
 
-There is no lint script and no test suite in this repo (`tworld-engine` has its own `test/` directory for engine logic, but this frontend has none). Verification is manual: run `npm run dev` and play-test in a browser. `tsc` is not wired into a script; check types with `npx tsc --noEmit` if needed (config already has `noEmit: true`).
+There is no lint script. `tsc` is not wired into a script; check types with `npx tsc --noEmit` if needed (config already has `noEmit: true`). Test coverage is intentionally narrow: `src/tileset.test.ts` unit-tests `applyChromaKey` (the pixel-processing core of `loadTileset`, pulled out as a pure function of a raw pixel buffer specifically so it's testable without a DOM/canvas) against a handful of synthetic pixel buffers — most usefully a regression test for a bug where scanning+mutating the same buffer in place made a chroma-keyed sprite's shadow tint cascade across its whole background (see git history on `tileset.ts` for the incident). Everything else (rendering, input, sound, HUD, routing) has no automated coverage; verify those manually via `npm run dev` and play-testing in a browser. CI (below) runs `npm test` on every push to `main`, so this suite is a merge gate, not just a local nicety.
 
 CI (`.github/workflows/deploy.yml`) runs `npm ci && npm run build` and deploys `dist/` to GitHub Pages on every push to `main`.
 
