@@ -23,7 +23,7 @@ const TRANSPARENT_KEY = { r: 255, g: 0, b: 255 };
 // black for anything else (every real black pixel in tiles.bmp sits right
 // next to this dither pattern), any black pixel touching magenta is
 // unambiguously a dither pixel, not deliberate linework.
-const SHADOW_ALPHA = 90;
+export const SHADOW_ALPHA = 90;
 
 function isKeyColor(r: number, g: number, b: number): boolean {
   return r === TRANSPARENT_KEY.r && g === TRANSPARENT_KEY.g && b === TRANSPARENT_KEY.b;
@@ -167,27 +167,12 @@ export interface Tileset {
   positionOf(id: number): [number, number];
 }
 
-// Loads tiles.bmp, then chroma-keys out the magenta background (used by
-// the original renderer's "keyed" tiles — keys, boots, and every creature)
-// so those sprites composite correctly over whatever floor tile is drawn
-// beneath them.
-export async function loadTileset(url: string): Promise<Tileset> {
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`failed to load ${url}`));
-    image.src = url;
-  });
-
-  const canvas = document.createElement("canvas");
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const { data, width, height } = imageData;
-
+// Chroma-keys out the magenta background (used by the original renderer's
+// "keyed" tiles — keys, boots, and every creature) in place, so those
+// sprites composite correctly over whatever floor tile is drawn beneath
+// them. Pulled out of loadTileset as a pure function of pixel data (rather
+// than a canvas/image) so it can be unit-tested without a DOM.
+export function applyChromaKey(data: Uint8ClampedArray, width: number, height: number): void {
   // Snapshot taken before any pixel is mutated below, so a pixel's
   // neighbors can always be checked against their original color
   // regardless of scan order. Reading `data` itself here would be wrong:
@@ -242,6 +227,28 @@ export async function loadTileset(url: string): Promise<Tileset> {
       }
     }
   }
+}
+
+// Loads tiles.bmp, then chroma-keys out the magenta background (used by
+// the original renderer's "keyed" tiles — keys, boots, and every creature)
+// so those sprites composite correctly over whatever floor tile is drawn
+// beneath them.
+export async function loadTileset(url: string): Promise<Tileset> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`failed to load ${url}`));
+    image.src = url;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  applyChromaKey(imageData.data, imageData.width, imageData.height);
   ctx.putImageData(imageData, 0, 0);
 
   return {
