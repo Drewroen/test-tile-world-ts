@@ -13,26 +13,6 @@ import { Tile } from "tworld-engine";
 export const TILE_SIZE = 48;
 const TRANSPARENT_KEY = { r: 255, g: 0, b: 255 };
 
-// Keyed sprites' drop shadows (and Chip/keys/boots' own shadows) aren't
-// drawn as a solid color: they're a 1px checkerboard of pure black against
-// the magenta key, an ordered-dithering trick from the original 8-bit-era
-// tileset meant to fake a translucent gray shadow once averaged with
-// neighboring pixels. Chroma-keying only the magenta half leaves the black
-// half fully opaque, so the shadow renders as a hard black speckle instead
-// of blending into the floor beneath it. Since the tileset never uses pure
-// black for anything else (every real black pixel in tiles.bmp sits right
-// next to this dither pattern), any black pixel touching magenta is
-// unambiguously a dither pixel, not deliberate linework.
-const SHADOW_ALPHA = 90;
-
-function isKeyColor(r: number, g: number, b: number): boolean {
-  return r === TRANSPARENT_KEY.r && g === TRANSPARENT_KEY.g && b === TRANSPARENT_KEY.b;
-}
-
-function isDitherBlack(r: number, g: number, b: number): boolean {
-  return r === 0 && g === 0 && b === 0;
-}
-
 // Direction offsets match diridx() (state.h / tworld-engine's constants):
 // NORTH=0, WEST=1, SOUTH=2, EAST=3. Creature tile ids are 4-aligned, so
 // `Tile.X + offset` reproduces the engine's own crtile(id, dir) packing.
@@ -186,52 +166,14 @@ export async function loadTileset(url: string): Promise<Tileset> {
   ctx.drawImage(img, 0, 0);
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const { data, width, height } = imageData;
-
-  // RGB is read here (never written until the second pass below), so a
-  // pixel's neighbors can always be checked against their original color
-  // regardless of scan order.
-  function hasDitherPartner(x: number, y: number, r: number, g: number, b: number): boolean {
-    const wantBlack = isKeyColor(r, g, b);
-    for (const [dx, dy] of [
-      [-1, 0],
-      [1, 0],
-      [0, -1],
-      [0, 1],
-    ]) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-      const ni = (ny * width + nx) * 4;
-      const match = wantBlack
-        ? isDitherBlack(data[ni]!, data[ni + 1]!, data[ni + 2]!)
-        : isKeyColor(data[ni]!, data[ni + 1]!, data[ni + 2]!);
-      if (match) return true;
-    }
-    return false;
-  }
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      const r = data[i]!;
-      const g = data[i + 1]!;
-      const b = data[i + 2]!;
-      const isKey = isKeyColor(r, g, b);
-      const isBlack = isDitherBlack(r, g, b);
-      if (!isKey && !isBlack) continue;
-
-      if (hasDitherPartner(x, y, r, g, b)) {
-        // Merge both halves of the checkerboard into one uniform
-        // low-alpha black, so the pair reads as a soft shadow instead of
-        // an opaque/transparent speckle.
-        data[i] = 0;
-        data[i + 1] = 0;
-        data[i + 2] = 0;
-        data[i + 3] = SHADOW_ALPHA;
-      } else if (isKey) {
-        data[i + 3] = 0;
-      }
+  const { data } = imageData;
+  for (let i = 0; i < data.length; i += 4) {
+    if (
+      data[i] === TRANSPARENT_KEY.r &&
+      data[i + 1] === TRANSPARENT_KEY.g &&
+      data[i + 2] === TRANSPARENT_KEY.b
+    ) {
+      data[i + 3] = 0;
     }
   }
   ctx.putImageData(imageData, 0, 0);
