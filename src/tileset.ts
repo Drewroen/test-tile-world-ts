@@ -188,9 +188,17 @@ export async function loadTileset(url: string): Promise<Tileset> {
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const { data, width, height } = imageData;
 
-  // RGB is read here (never written until the second pass below), so a
-  // pixel's neighbors can always be checked against their original color
-  // regardless of scan order.
+  // Snapshot taken before any pixel is mutated below, so a pixel's
+  // neighbors can always be checked against their original color
+  // regardless of scan order. Reading `data` itself here would be wrong:
+  // since the main loop scans row-major and writes back into `data` as it
+  // goes, a pixel's left/up neighbors would already be mutated to
+  // (0,0,0,alpha) by the time this runs, making them look like dither
+  // partners even when they weren't originally — cascading the shadow
+  // tint across an entire tile's magenta background instead of just the
+  // real checkerboard region.
+  const original = data.slice();
+
   function hasDitherPartner(x: number, y: number, r: number, g: number, b: number): boolean {
     const wantBlack = isKeyColor(r, g, b);
     for (const [dx, dy] of [
@@ -204,8 +212,8 @@ export async function loadTileset(url: string): Promise<Tileset> {
       if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
       const ni = (ny * width + nx) * 4;
       const match = wantBlack
-        ? isDitherBlack(data[ni]!, data[ni + 1]!, data[ni + 2]!)
-        : isKeyColor(data[ni]!, data[ni + 1]!, data[ni + 2]!);
+        ? isDitherBlack(original[ni]!, original[ni + 1]!, original[ni + 2]!)
+        : isKeyColor(original[ni]!, original[ni + 1]!, original[ni + 2]!);
       if (match) return true;
     }
     return false;
