@@ -4,18 +4,69 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>tworld-engine demo</title>
+    <meta
+      name="description"
+      content="Play Chip's Challenge / Tile World levels in the browser — a demo of tworld-engine, a TypeScript port of the original game logic."
+    />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="app">
       <div id="sets-page">
-        <h1>tworld-engine demo</h1>
-        <p class="subtitle">
-          A TypeScript port of the Tile World (Chip's Challenge) game logic
-          — pick a set to play in the browser.
-        </p>
-        <div id="sets-status" class="set-status"></div>
-        <ul id="sets-list" class="sets-list"></ul>
+        <header class="hero">
+          <h1>Chip's Challenge, in your browser</h1>
+          <p class="subtitle">
+            A playable demo of
+            <a href="https://github.com/Drewroen/tworld-engine">tworld-engine</a> — a
+            TypeScript port of the Tile World (Chip's Challenge) game logic, verified
+            bit-exact against the original C source.
+          </p>
+          <div class="hero-actions">
+            <button id="quick-play-btn" class="play-btn primary">&blacktriangleright; Play</button>
+            <span class="hero-note">
+              Never played? That starts the bundled Intro levels in one click. Or
+              jump into the original 149:
+              <button id="quick-play-cc1-btn" class="link-btn">Play Chip's Challenge 1</button>
+            </span>
+          </div>
+        </header>
+
+        <section id="continue-section" class="hidden">
+          <h2>Continue</h2>
+          <div id="continue-card" class="continue-card"></div>
+        </section>
+
+        <section>
+          <h2>Classic sets</h2>
+          <p class="section-note">
+            Every set plays under <strong>MS</strong> rules (the original Microsoft
+            release) or <strong>Lynx</strong> rules (Tile World's exacting
+            re-implementation — some MS-era levels behave differently). <strong>Play</strong>
+            starts with MS; you can switch ruleset mid-game and the level restarts.
+          </p>
+          <ul id="curated-list" class="curated-list"></ul>
+        </section>
+
+        <section>
+          <h2>All sets <span id="sets-count" class="muted"></span></h2>
+          <label class="search-label" for="sets-search">Search by name</label>
+          <input
+            id="sets-search"
+            type="search"
+            placeholder="e.g. blobs, CCLP4, icewalls"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div id="sets-status" class="set-status"></div>
+          <ul id="sets-list" class="sets-list"></ul>
+          <p id="sets-more" class="section-note"></p>
+        </section>
+
+        <footer class="site-footer">
+          Level sets are loaded from
+          <a href="https://bitbusters.club/gliderbot/sets/cc1/">bitbusters.club's CC1 mirror</a>
+          — only the small Intro set ships inside this repo.
+        </footer>
       </div>
 
       <div id="game-page" class="hidden">
@@ -25,8 +76,16 @@
             Level:
             <select id="level-select"></select>
           </label>
-          <span id="ruleset-readout" class="ruleset-readout"></span>
+          <span id="set-name" class="set-name-readout"></span>
+          <button
+            id="ruleset-toggle"
+            class="ruleset-toggle"
+            title="Switch between MS and Lynx rules; the level restarts"
+          >
+            Ruleset: MS
+          </button>
           <button id="restart-btn">Restart</button>
+          <button id="copy-link-btn" title="Copy a link to this exact level">Copy level link</button>
         </div>
         <div id="set-status" class="set-status"></div>
 
@@ -66,9 +125,28 @@
             <div id="hint-panel" class="hint-panel"></div>
             <div id="status" class="status"></div>
             <p class="hint">
-              Use arrow keys to move (click the board first), or on mobile tap
-              the top/left/right/bottom of the board.
+              Arrows or WASD to move (click the board first), R restarts, or on
+              mobile tap the top/left/right/bottom of the board.
             </p>
+          </div>
+        </div>
+
+        <div
+          id="howto-overlay"
+          class="overlay hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="howto-title"
+        >
+          <div class="overlay-card">
+            <h2 id="howto-title">How to play</h2>
+            <ul>
+              <li>Collect the chips shown in the HUD, then reach the exit — doors and hazards need the right keys and boots.</li>
+              <li>Arrow keys or WASD move Chip; on a touch screen, tap near the edge of the board in the direction you want.</li>
+              <li>The clock only starts on your first move, so take your time at the start of a level.</li>
+              <li>R restarts the level. Best times are saved in your browser, per level and ruleset.</li>
+            </ul>
+            <button id="howto-dismiss" class="play-btn primary">Got it</button>
           </div>
         </div>
       </div>

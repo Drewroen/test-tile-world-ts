@@ -1,6 +1,7 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+  --card-border: currentColor;
 }
 
 body {
@@ -20,24 +21,166 @@ h1 {
   margin-bottom: 0.25rem;
 }
 
+h2 {
+  font-size: 1.05rem;
+  margin: 1.75rem 0 0.4rem;
+}
+
 .subtitle {
   opacity: 0.75;
   margin-top: 0;
   font-size: 0.9rem;
 }
 
-.toolbar {
+.muted {
+  font-weight: normal;
+  opacity: 0.6;
+  font-size: 0.85rem;
+}
+
+section {
+  margin-bottom: 0.5rem;
+}
+
+/* ---- landing page ---- */
+
+.hero {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+}
+
+.hero-actions {
   display: flex;
-  gap: 1rem;
   align-items: center;
-  margin: 1rem 0;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+
+.hero-note {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  flex: 1 1 16rem;
+}
+
+.play-btn {
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.play-btn:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.play-btn.primary {
+  font-weight: 600;
+  background: currentColor;
+  color: canvas;
+  border-color: currentColor;
+}
+
+.play-btn.primary:hover {
+  opacity: 0.85;
+}
+
+.link-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.section-note {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  margin: 0.25rem 0 0.6rem;
+  line-height: 1.4;
+}
+
+.curated-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.6rem;
+}
+
+.curated-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+}
+
+.curated-title {
+  font-weight: 600;
+}
+
+.curated-blurb {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  line-height: 1.35;
+  flex: 1;
+}
+
+.curated-progress {
+  font-size: 0.78rem;
+  opacity: 0.9;
+}
+
+.continue-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid currentColor;
+  border-radius: 6px;
   flex-wrap: wrap;
 }
+
+.continue-detail {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.search-label {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-bottom: 0.25rem;
+}
+
+#sets-search {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+/* ---- set list ---- */
 
 .set-status {
   font-size: 0.85rem;
   opacity: 0.75;
-  margin: -0.5rem 0 1rem;
+  margin: 0.5rem 0 1rem;
   min-height: 1.2em;
 }
 
@@ -52,11 +195,11 @@ h1 {
 
 .sets-list {
   list-style: none;
-  margin: 0;
+  margin: 0.6rem 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .set-row {
@@ -64,24 +207,87 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid currentColor;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--card-border);
   border-radius: 4px;
 }
 
 .set-name {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .set-actions {
   display: flex;
   gap: 0.5rem;
   flex-shrink: 0;
+  align-items: center;
 }
 
-.ruleset-readout {
-  font-size: 0.9rem;
-  opacity: 0.85;
+.set-actions button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.set-actions button:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.set-actions button.primary {
+  font-weight: 600;
+  background: currentColor;
+  color: canvas;
+}
+
+.manual-link {
+  font: inherit;
+  font-size: 0.8rem;
+  width: 14rem;
+  max-width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: 1px dashed currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.site-footer {
+  margin-top: 1.5rem;
+  font-size: 0.78rem;
+  opacity: 0.65;
+  line-height: 1.4;
+}
+
+/* ---- game page ---- */
+
+.toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+}
+
+.toolbar button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.set-name-readout {
+  font-size: 0.85rem;
+  opacity: 0.8;
 }
 
 .game-area {
@@ -198,6 +404,42 @@ canvas {
   font-size: 0.8rem;
 }
 
+/* ---- first-run how-to overlay ---- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10;
+}
+
+.overlay-card {
+  max-width: 30rem;
+  background: canvas;
+  color: canvastext;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.overlay-card h2 {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.overlay-card ul {
+  margin: 0 0 1rem;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 @media (max-width: 640px) {
   body {
     padding: 0;
@@ -207,9 +449,15 @@ canvas {
     max-width: 100%;
   }
 
-  h1,
-  .subtitle,
-  .hint {
+  #sets-page {
+    padding: 0.9rem;
+  }
+
+  /* Only the game page's own chrome collapses on phones — the landing page's
+     heading and copy are the whole point of that page, so they stay. */
+  #game-page h1,
+  #game-page .subtitle,
+  #game-page .hint {
     display: none;
   }
 
@@ -231,5 +479,9 @@ canvas {
   canvas#board {
     max-width: 100%;
     height: auto;
+  }
+
+  .curated-list {
+    grid-template-columns: 1fr;
   }
 }

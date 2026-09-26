@@ -15,7 +15,23 @@ import { drawBoard, drawCreatureOverlay, computeViewport, CELL_SIZES, TRADITIONA
 import { loadTileset, drawTile, type Tileset } from "./tileset";
 import { SoundManager } from "./sound";
 import { getBestTime, recordTime } from "./besttime";
-import { parseHash, buildHash, type RulesetSlug } from "./routing";
+import {
+  CURATED_SETS,
+  INTRO_SET,
+  datUrl,
+  parseSetsSnapshot,
+  searchSets,
+  type SetEntry,
+} from "./sets";
+import {
+  completedLevels,
+  getLastPlayed,
+  hasSeenHowTo,
+  markCompleted,
+  markHowToSeen,
+  saveLastPlayed,
+} from "./progress";
+import { parseHash, buildHash, type Route, type RulesetSlug } from "./routing";
 
 // The engine advances 20 ticks per (game) second — a fixed invariant of the
 // original C source (gen.h's TICKS_PER_SECOND), not part of the public API
@@ -23,19 +39,34 @@ import { parseHash, buildHash, type RulesetSlug } from "./routing";
 // constant back.
 const TICKS_PER_SECOND = 20;
 
+// The catalogue holds ~1,100 sets; rendering all of them as DOM rows is what
+// made the old landing page unusable, so results are capped and the "showing N
+// of M" line tells the player to keep typing.
+const SEARCH_RESULT_LIMIT = 40;
+
 const canvas = document.querySelector<HTMLCanvasElement>("#board")!;
 const ctx = canvas.getContext("2d")!;
 ctx.imageSmoothingEnabled = false;
 
 const setsPageEl = document.querySelector<HTMLDivElement>("#sets-page")!;
 const gamePageEl = document.querySelector<HTMLDivElement>("#game-page")!;
+const curatedListEl = document.querySelector<HTMLUListElement>("#curated-list")!;
+const continueSectionEl = document.querySelector<HTMLElement>("#continue-section")!;
+const continueCardEl = document.querySelector<HTMLElement>("#continue-card")!;
+const setsCountEl = document.querySelector<HTMLElement>("#sets-count")!;
+const searchInput = document.querySelector<HTMLInputElement>("#sets-search")!;
 const setsListEl = document.querySelector<HTMLUListElement>("#sets-list")!;
+const setsMoreEl = document.querySelector<HTMLElement>("#sets-more")!;
 const setsStatusEl = document.querySelector<HTMLElement>("#sets-status")!;
+const quickPlayBtn = document.querySelector<HTMLButtonElement>("#quick-play-btn")!;
+const quickPlayCc1Btn = document.querySelector<HTMLButtonElement>("#quick-play-cc1-btn")!;
 const backToSetsBtn = document.querySelector<HTMLButtonElement>("#back-to-sets-btn")!;
-const rulesetReadoutEl = document.querySelector<HTMLElement>("#ruleset-readout")!;
 
 const levelSelect = document.querySelector<HTMLSelectElement>("#level-select")!;
 const restartBtn = document.querySelector<HTMLButtonElement>("#restart-btn")!;
+const rulesetToggleBtn = document.querySelector<HTMLButtonElement>("#ruleset-toggle")!;
+const copyLinkBtn = document.querySelector<HTMLButtonElement>("#copy-link-btn")!;
+const setNameEl = document.querySelector<HTMLElement>("#set-name")!;
 const levelNameEl = document.querySelector<HTMLElement>("#level-name")!;
 const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
@@ -44,46 +75,8 @@ const bestTimeEl = document.querySelector<HTMLElement>("#best-time")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
 const hintPanelEl = document.querySelector<HTMLElement>("#hint-panel")!;
 const setStatusEl = document.querySelector<HTMLElement>("#set-status")!;
-
-// Gliderbot's public mirror of the official CC1 level sets. It's a plain
-// directory listing (Apache/nginx autoindex), so the set list is scraped
-// by pulling out every <a href> that points at a .dat file rather than
-// relying on any particular page layout.
-const CC1_SETS_INDEX_URL = "https://bitbusters.club/gliderbot/sets/cc1/";
-
-interface DatSet {
-  id: string;
-  name: string;
-  url: string;
-}
-
-// Bundled locally (public/intro.dat) rather than fetched from the network,
-// so it's always in availableSets — even before (or if) the bitbusters.club
-// fetch below completes — which lets "#/Intro/ms" resolve immediately on a
-// fresh page load.
-const INTRO_SET: DatSet = {
-  id: "Intro",
-  name: "Intro (default)",
-  url: `${import.meta.env.BASE_URL}intro.dat`,
-};
-
-async function fetchAvailableSets(): Promise<DatSet[]> {
-  const res = await fetch(CC1_SETS_INDEX_URL);
-  if (!res.ok) throw new Error(`Failed to load set list (HTTP ${res.status})`);
-  const html = await res.text();
-  const doc = new DOMParser().parseFromString(html, "text/html");
-
-  const sets: DatSet[] = [];
-  for (const anchor of Array.from(doc.querySelectorAll("a[href]"))) {
-    const href = anchor.getAttribute("href") ?? "";
-    if (!/\.dat$/i.test(href)) continue;
-    const url = new URL(href, CC1_SETS_INDEX_URL).toString();
-    const name = decodeURIComponent(href).replace(/\.dat$/i, "");
-    sets.push({ id: name, name, url });
-  }
-  sets.sort((a, b) => a.name.localeCompare(b.name));
-  return sets;
-}
+const howtoOverlayEl = document.querySelector<HTMLElement>("#howto-overlay")!;
+const howtoDismissBtn = document.querySelector<HTMLButtonElement>("#howto-dismiss")!;
 
 const ICON_SIZE = 24;
 const KEY_TILES = [Tile.Key_Red, Tile.Key_Blue, Tile.Key_Yellow, Tile.Key_Green];
@@ -101,7 +94,13 @@ const prevKeysDrawn: (boolean | null)[] = [null, null, null, null];
 const prevBootsDrawn: (boolean | null)[] = [null, null, null, null];
 
 let levels: GameSetup[] = [];
-let currentSetId = "";
+// Catalogue id of the set whose .dat is currently in `levels` (e.g. "CCLP1"),
+// and the URL it was fetched from — the latter is what best times and
+// completion marks are keyed by, since the same level number can appear in
+// different sets (see besttime.ts).
+let loadedSetId: string | null = null;
+let currentSetUrl = "";
+let currentLevelNumber: number | null = null;
 let game: Game | null = null;
 let tickHandle: number | undefined;
 let tileset: Tileset | null = null;
@@ -111,11 +110,24 @@ const sound = new SoundManager(import.meta.env.BASE_URL);
 // on level load).
 let gameStarted = false;
 
-// Populated once at startup (or left as just [INTRO_SET] if the network
-// fetch fails) and reused both to render the sets page and to resolve a
-// setId parsed out of the URL hash back into a downloadable .dat URL.
-let availableSets: DatSet[] = [INTRO_SET];
+// Populated from the shipped snapshot (public/sets.json) at startup; until it
+// arrives, only the bundled Intro set is listed.
+let availableSets: SetEntry[] = [];
+let catalogueLoaded = false;
 let currentRulesetSlug: RulesetSlug = "ms";
+
+// Guard for overlapping set loads: clicking two sets in quick succession used
+// to be able to finish the first fetch last and start a level from the wrong
+// set.
+let loadToken = 0;
+
+// A set's .dat. Only the Intro set is bundled; everything else is fetched from
+// bitbusters.club. The catalogue is *not* consulted — a deep link to any set id
+// works even before (or without) the snapshot, and a genuinely unknown id
+// surfaces as a failed fetch rather than a silent dead end.
+function setUrlFor(setId: string): string {
+  return setId === INTRO_SET.id ? `${import.meta.env.BASE_URL}intro.dat` : datUrl(setId);
+}
 
 function ensureStarted(): void {
   sound.resume();
@@ -134,24 +146,49 @@ function stopGame(): void {
   touchDirs.clear();
 }
 
+// Arrow keys plus WASD, which most players reach for first.
 const KEY_TO_DIR: Record<string, number> = {
-  ArrowUp: NORTH,
-  ArrowLeft: WEST,
-  ArrowDown: SOUTH,
-  ArrowRight: EAST,
+  arrowup: NORTH,
+  arrowleft: WEST,
+  arrowdown: SOUTH,
+  arrowright: EAST,
+  w: NORTH,
+  a: WEST,
+  s: SOUTH,
+  d: EAST,
 };
 const heldDirs = new Set<number>();
 
+// Keystrokes belong to the game only when they aren't aimed at a control: the
+// landing page has a search box, and an "r" typed into it must not restart a
+// level in a hidden page behind it.
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "SELECT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable)
+  );
+}
+
 window.addEventListener("keydown", (e) => {
-  const dir = KEY_TO_DIR[e.key];
+  if (isTextEntryTarget(e.target)) return;
+  const key = e.key.toLowerCase();
+  const dir = KEY_TO_DIR[key];
   if (dir !== undefined) {
     e.preventDefault();
     heldDirs.add(dir);
     ensureStarted();
+    return;
+  }
+  if (key === "r" && !gamePageEl.classList.contains("hidden")) {
+    e.preventDefault();
+    restartCurrentLevel();
   }
 });
 window.addEventListener("keyup", (e) => {
-  const dir = KEY_TO_DIR[e.key];
+  const dir = KEY_TO_DIR[e.key.toLowerCase()];
   if (dir !== undefined) heldDirs.delete(dir);
 });
 
@@ -201,6 +238,28 @@ function currentRuleset(): number {
   return currentRulesetSlug === "ms" ? Ruleset.MS : Ruleset.Lynx;
 }
 
+// The URL always names the level being played, so "copy link" and the address
+// bar are both shareable deep links. replaceState (not a hash assignment)
+// keeps level changes out of the history stack — the back button stays a way
+// back to the set list rather than a level-by-level rewind.
+function syncHash(): void {
+  if (currentLevelNumber === null) return;
+  history.replaceState(null, "", buildHash(loadedSetId ?? "", currentRulesetSlug, currentLevelNumber));
+}
+
+// CC1 .dat level names are NUL-terminated, and the engine hands the name back
+// verbatim — so "#1 KEYS AND CHIPS\u0000" is what the picker would otherwise
+// display and what "copy level link" deep links would carry. Trim control
+// characters for display only.
+function levelDisplayName(level: GameSetup): string {
+  // eslint-disable-next-line no-control-regex
+  return level.name.replace(/[\u0000-\u001f\u007f]+/g, "").trim();
+}
+
+function levelLabel(level: GameSetup): string {
+  return `#${level.number} ${levelDisplayName(level) || "(untitled)"}`;
+}
+
 function startLevel(index: number): void {
   stopGame();
   sound.reset();
@@ -210,13 +269,37 @@ function startLevel(index: number): void {
   const setup = levels[index];
   if (!setup) return;
   game = new Game(setup, currentRuleset());
-  levelNameEl.textContent = `#${setup.number} ${setup.name || "(untitled)"}`;
+  currentLevelNumber = setup.number;
+  levelSelect.value = String(setup.number);
+  levelNameEl.textContent = levelLabel(setup);
   levelPasswordEl.textContent = setup.passwd ? `Password: ${setup.passwd}` : "";
 
-  const bestSoFar = getBestTime(currentSetId, setup.number, currentRuleset());
+  const bestSoFar = getBestTime(currentSetUrl, setup.number, currentRuleset());
   bestTimeEl.textContent = bestSoFar === null ? "—" : `${bestSoFar}s`;
 
+  if (loadedSetId) {
+    saveLastPlayed(localStorage, {
+      setId: loadedSetId,
+      ruleset: currentRulesetSlug,
+      levelNumber: setup.number,
+      levelName: levelDisplayName(setup),
+    });
+  }
+  syncHash();
   render();
+}
+
+function levelIndexForNumber(levelNumber: number): number {
+  const index = levels.findIndex((level) => level.number === levelNumber);
+  return index >= 0 ? index : 0;
+}
+
+function startLevelByNumber(levelNumber: number): void {
+  startLevel(levelIndexForNumber(levelNumber));
+}
+
+function restartCurrentLevel(): void {
+  startLevelByNumber(currentLevelNumber ?? levels[0]?.number ?? 1);
 }
 
 function tick(): void {
@@ -233,17 +316,17 @@ function tick(): void {
     sound.stopLoops();
     statusEl.textContent = result > 0 ? "You win!" : "You lose.";
     statusEl.className = `status ${result > 0 ? "win" : "lose"} status-pop`;
-    if (result > 0 && game) {
-      const setup = levels[Number(levelSelect.value)];
-      if (setup) {
-        const state = game.state;
-        const hasTimeLimit = Boolean(state.timelimit);
-        const seconds = hasTimeLimit
-          ? Math.max(0, Math.ceil((state.timelimit - state.currenttime) / TICKS_PER_SECOND))
-          : game.secondsPlayed();
-        if (recordTime(currentSetId, setup.number, currentRuleset(), seconds, hasTimeLimit)) {
-          bestTimeEl.textContent = `${seconds}s`;
-        }
+    if (result > 0 && game && currentLevelNumber !== null) {
+      const state = game.state;
+      const hasTimeLimit = Boolean(state.timelimit);
+      const seconds = hasTimeLimit
+        ? Math.max(0, Math.ceil((state.timelimit - state.currenttime) / TICKS_PER_SECOND))
+        : game.secondsPlayed();
+      // Completion is recorded separately from best times: a win that doesn't
+      // improve the best time still counts as progress on the landing page.
+      markCompleted(localStorage, currentSetUrl, currentLevelNumber, currentRuleset());
+      if (recordTime(currentSetUrl, currentLevelNumber, currentRuleset(), seconds, hasTimeLimit)) {
+        bestTimeEl.textContent = `${seconds}s`;
       }
     }
   }
@@ -319,39 +402,82 @@ function render(): void {
   hintPanelEl.textContent = showHint ? state.hinttext : "";
 }
 
-async function loadSet(url: string): Promise<void> {
-  levelSelect.disabled = true;
-  setStatusEl.textContent = "Loading set…";
-  setStatusEl.className = "set-status";
+// ---------------------------------------------------------------------------
+// Landing page
+// ---------------------------------------------------------------------------
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    levels = splitDatFile(bytes).levels;
-    currentSetId = url;
+function playButton(setId: string, ruleset: RulesetSlug, label = "Play"): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  if (ruleset === "ms") btn.className = "primary";
+  btn.title = `Play ${setId} with ${ruleset === "ms" ? "MS" : "Lynx"} rules`;
+  btn.addEventListener("click", () => {
+    location.hash = buildHash(setId, ruleset);
+  });
+  return btn;
+}
 
-    levelSelect.innerHTML = "";
-    levels.forEach((level, i) => {
-      const opt = document.createElement("option");
-      opt.value = String(i);
-      opt.textContent = `#${level.number} ${level.name || "(untitled)"}`;
-      levelSelect.appendChild(opt);
-    });
+function renderCurated(): void {
+  curatedListEl.innerHTML = "";
+  for (const set of CURATED_SETS) {
+    const card = document.createElement("li");
+    card.className = "curated-card";
 
-    setStatusEl.textContent = "";
-    startLevel(0);
-  } catch (err) {
-    setStatusEl.textContent = `Failed to load set: ${(err as Error).message}`;
-    setStatusEl.className = "set-status error";
-  } finally {
-    levelSelect.disabled = false;
+    const title = document.createElement("div");
+    title.className = "curated-title";
+    title.textContent = set.label;
+    card.appendChild(title);
+
+    const blurb = document.createElement("div");
+    blurb.className = "curated-blurb";
+    blurb.textContent = set.blurb;
+    card.appendChild(blurb);
+
+    const completed = completedLevels(localStorage, setUrlFor(set.id));
+    if (completed.size > 0) {
+      const progress = document.createElement("div");
+      progress.className = "curated-progress";
+      progress.textContent = `${completed.size} level${completed.size === 1 ? "" : "s"} beaten`;
+      card.appendChild(progress);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "set-actions";
+    actions.appendChild(playButton(set.id, "ms"));
+    actions.appendChild(playButton(set.id, "lynx", "Lynx"));
+    card.appendChild(actions);
+
+    curatedListEl.appendChild(card);
   }
 }
 
-function renderSetsList(): void {
+function renderContinue(): void {
+  const last = getLastPlayed(localStorage);
+  if (!last) {
+    continueSectionEl.classList.add("hidden");
+    continueCardEl.innerHTML = "";
+    return;
+  }
+  continueSectionEl.classList.remove("hidden");
+  continueCardEl.innerHTML = "";
+
+  const detail = document.createElement("div");
+  detail.className = "continue-detail";
+  detail.textContent = `${last.setId} · #${last.levelNumber}${
+    last.levelName ? ` ${last.levelName}` : ""
+  } · ${last.ruleset === "ms" ? "MS" : "Lynx"} rules`;
+  continueCardEl.appendChild(detail);
+  continueCardEl.appendChild(
+    playButton(last.setId, last.ruleset, `Continue #${last.levelNumber}`),
+  );
+}
+
+function renderSetResults(): void {
+  const query = searchInput.value.trim();
+  const { matches, total } = searchSets(availableSets, query, SEARCH_RESULT_LIMIT);
+
   setsListEl.innerHTML = "";
-  for (const set of availableSets) {
+  for (const set of matches) {
     const row = document.createElement("li");
     row.className = "set-row";
 
@@ -362,90 +488,306 @@ function renderSetsList(): void {
 
     const actions = document.createElement("div");
     actions.className = "set-actions";
-    for (const ruleset of ["ms", "lynx"] as const) {
-      const btn = document.createElement("button");
-      btn.textContent = ruleset === "ms" ? "MS" : "Lynx";
-      btn.addEventListener("click", () => {
-        location.hash = buildHash(set.id, ruleset);
-      });
-      actions.appendChild(btn);
-    }
+    actions.appendChild(playButton(set.id, "ms"));
+    actions.appendChild(playButton(set.id, "lynx", "Lynx"));
     row.appendChild(actions);
 
     setsListEl.appendChild(row);
   }
+
+  if (!catalogueLoaded) {
+    setsMoreEl.textContent = "";
+    return;
+  }
+  if (total === 0) {
+    setsMoreEl.textContent = query
+      ? `No sets match "${query}".`
+      : "The set catalogue is empty.";
+    return;
+  }
+  if (total > matches.length) {
+    setsMoreEl.textContent = query
+      ? `Showing ${matches.length} of ${total} matching sets — keep typing to narrow it down.`
+      : `Showing the first ${matches.length} of ${total.toLocaleString()} sets — search above to find a specific one.`;
+    return;
+  }
+  setsMoreEl.textContent = query
+    ? `${total} matching set${total === 1 ? "" : "s"}.`
+    : `${total.toLocaleString()} sets.`;
 }
 
-async function refreshAvailableSets(): Promise<void> {
-  try {
-    const sets = await fetchAvailableSets();
-    availableSets = [INTRO_SET, ...sets];
-    setsStatusEl.textContent = "";
-    setsStatusEl.className = "set-status";
-  } catch (err) {
-    console.error("Failed to load CC1 set list", err);
-    setsStatusEl.textContent = `Couldn't load the set list from bitbusters.club: ${(err as Error).message}`;
-    setsStatusEl.className = "set-status error";
-  }
-  renderSetsList();
+function renderLanding(): void {
+  renderContinue();
+  renderCurated();
+  renderSetResults();
 }
 
 function showSetsPage(): void {
   stopGame();
+  game = null;
+  currentLevelNumber = null;
   gamePageEl.classList.add("hidden");
   setsPageEl.classList.remove("hidden");
+  document.title = "tworld-engine demo — play Chip's Challenge in the browser";
+  closeHowTo();
+  renderLanding();
 }
 
-async function showGamePage(setId: string, ruleset: RulesetSlug): Promise<void> {
+function showGamePage(setId: string, ruleset: RulesetSlug): void {
   setsPageEl.classList.add("hidden");
   gamePageEl.classList.remove("hidden");
-  currentRulesetSlug = ruleset;
-  rulesetReadoutEl.textContent = ruleset === "ms" ? "Ruleset: MS" : "Ruleset: Lynx";
+  setNameEl.textContent = `Set: ${setId}`;
+  document.title = `${setId} — tworld-engine demo`;
+}
 
-  const set = availableSets.find((s) => s.id === setId);
-  if (!set) {
-    setStatusEl.textContent = `Unknown set: ${setId}`;
-    setStatusEl.className = "set-status error";
-    return;
+// ---------------------------------------------------------------------------
+// First-run how-to
+// ---------------------------------------------------------------------------
+
+function openHowTo(): void {
+  howtoOverlayEl.classList.remove("hidden");
+  howtoDismissBtn.focus();
+}
+
+function closeHowTo(): void {
+  howtoOverlayEl.classList.add("hidden");
+}
+
+// Shown once per browser: the goal, the controls, and the fact that the clock
+// deliberately waits for the first move (otherwise the stalled "Time" readout
+// reads as a bug).
+function maybeShowHowTo(): void {
+  if (hasSeenHowTo(localStorage)) return;
+  markHowToSeen(localStorage);
+  openHowTo();
+}
+
+// ---------------------------------------------------------------------------
+// Routing
+// ---------------------------------------------------------------------------
+
+async function openSet(setId: string, ruleset: RulesetSlug, levelNumber: number | null): Promise<boolean> {
+  const token = ++loadToken;
+  const sameSet = setId === loadedSetId;
+
+  currentRulesetSlug = ruleset;
+  rulesetToggleBtn.textContent = `Ruleset: ${ruleset === "ms" ? "MS" : "Lynx"}`;
+
+  if (!sameSet) {
+    if (catalogueLoaded && setId !== INTRO_SET.id && !availableSets.some((s) => s.id === setId)) {
+      setStatusEl.textContent = `Unknown set: ${setId}`;
+      setStatusEl.className = "set-status error";
+      return false;
+    }
+    if (!(await loadSet(setId, setUrlFor(setId), token))) return false;
   }
-  await loadSet(set.url);
+
+  // No level in the route means "wherever the player already is" for a set
+  // that's already loaded, and the first level for a freshly loaded one.
+  const target = levelNumber ?? currentLevelNumber ?? levels[0]?.number ?? 1;
+  if (target !== currentLevelNumber || !game) startLevelByNumber(target);
+  else syncHash();
+  return game !== null;
+}
+
+async function loadSet(setId: string, url: string, token: number): Promise<boolean> {
+  levelSelect.disabled = true;
+  setStatusEl.textContent = "Loading set…";
+  setStatusEl.className = "set-status";
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (token !== loadToken) return false;
+
+    levels = splitDatFile(bytes).levels;
+    loadedSetId = setId;
+    currentSetUrl = url;
+    currentLevelNumber = null;
+
+    levelSelect.innerHTML = "";
+    for (const level of levels) {
+      const opt = document.createElement("option");
+      opt.value = String(level.number);
+      opt.textContent = levelLabel(level);
+      levelSelect.appendChild(opt);
+    }
+
+    setStatusEl.textContent = "";
+    return true;
+  } catch (err) {
+    if (token === loadToken) {
+      setStatusEl.textContent = `Failed to load set: ${(err as Error).message}`;
+      setStatusEl.className = "set-status error";
+    }
+    return false;
+  } finally {
+    if (token === loadToken) levelSelect.disabled = false;
+  }
+}
+
+function currentRoute(): Route | null {
+  return parseHash(location.hash);
 }
 
 function handleRouteChange(): void {
-  const route = parseHash(location.hash);
-  if (route) {
-    showGamePage(route.setId, route.ruleset);
-  } else {
+  const route = currentRoute();
+  if (!route) {
     showSetsPage();
+    return;
   }
+  // Switch pages up front so the "Loading set…" line and any fetch error land
+  // somewhere visible; the how-to card waits until a level is actually
+  // running so it can't sit on top of an error message.
+  showGamePage(route.setId, route.ruleset);
+  void openSet(route.setId, route.ruleset, route.levelNumber).then((playing) => {
+    if (playing) maybeShowHowTo();
+  });
 }
+
+// ---------------------------------------------------------------------------
+// Catalogue
+// ---------------------------------------------------------------------------
+
+// The catalogue is a snapshot committed to the repo (public/sets.json, see
+// scripts/fetch-sets-index.mjs) rather than a live scrape of bitbusters.club:
+// the landing page used to depend on that host being up, same-origin-friendly
+// and fast, and degraded to "Intro only" when it wasn't. Only the .dat a player
+// actually picks is fetched at runtime now.
+async function loadCatalogue(): Promise<void> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}sets.json`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    availableSets = parseSetsSnapshot(await res.json());
+    catalogueLoaded = availableSets.length > 0;
+    if (!catalogueLoaded) throw new Error("snapshot contains no sets");
+    setsStatusEl.textContent = "";
+    setsStatusEl.className = "set-status";
+    setsCountEl.textContent = `${availableSets.length.toLocaleString()} available`;
+  } catch (err) {
+    console.error("Failed to load the set catalogue", err);
+    availableSets = [INTRO_SET];
+    setsCountEl.textContent = "";
+    setsStatusEl.textContent =
+      "Couldn't load the set catalogue — the bundled Intro set still works, and any set can be deep-linked by name.";
+    setsStatusEl.className = "set-status error";
+  }
+  renderSetResults();
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
   tileset = await loadTileset(`${import.meta.env.BASE_URL}tiles.bmp`);
   sound.preload();
 
-  levelSelect.addEventListener("change", () => startLevel(Number(levelSelect.value)));
-  restartBtn.addEventListener("click", () => startLevel(Number(levelSelect.value)));
+  levelSelect.addEventListener("change", () => startLevelByNumber(Number(levelSelect.value)));
+  restartBtn.addEventListener("click", restartCurrentLevel);
+  quickPlayBtn.addEventListener("click", () => {
+    location.hash = buildHash(INTRO_SET.id, "ms");
+  });
+  quickPlayCc1Btn.addEventListener("click", () => {
+    location.hash = buildHash("CC1", "ms");
+  });
+  rulesetToggleBtn.addEventListener("click", () => {
+    // The engine takes its ruleset when the Game is constructed, so switching
+    // means rebuilding the current level under the other ruleset.
+    currentRulesetSlug = currentRulesetSlug === "ms" ? "lynx" : "ms";
+    rulesetToggleBtn.textContent = `Ruleset: ${currentRulesetSlug === "ms" ? "MS" : "Lynx"}`;
+    restartCurrentLevel();
+  });
+  copyLinkBtn.addEventListener("click", () => {
+    void copyLevelLink();
+  });
   backToSetsBtn.addEventListener("click", () => {
-    location.hash = "";
+    // pushState rather than an empty hash assignment: it leaves a real history
+    // entry, so the browser's back button returns to the level that was
+    // playing instead of an empty "#".
+    history.pushState(null, "", location.pathname + location.search);
+    showSetsPage();
+  });
+  searchInput.addEventListener("input", renderSetResults);
+  howtoDismissBtn.addEventListener("click", closeHowTo);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeHowTo();
   });
   window.addEventListener("hashchange", handleRouteChange);
 
-  // Render immediately with whatever's already in availableSets (at minimum
-  // INTRO_SET, which needs no network access) so the sets page and any
-  // deep link to a locally-bundled set resolve without waiting on the
-  // bitbusters.club fetch below. If the initial route names a set that
-  // isn't resolvable yet (a network-only set not yet fetched), re-dispatch
-  // once the fetch settles — but only then, so an already-loaded game
-  // (e.g. Intro) doesn't get needlessly reloaded a second time.
-  renderSetsList();
-  const initialRoute = parseHash(location.hash);
-  const resolvedImmediately =
-    !initialRoute || availableSets.some((s) => s.id === initialRoute.setId);
+  // Render the landing page and resolve the initial route before the
+  // catalogue arrives: the Intro set needs no network access, and every other
+  // set resolves from its id alone, so nothing on the critical path waits on
+  // the snapshot.
+  renderLanding();
   handleRouteChange();
 
-  await refreshAvailableSets();
-  if (!resolvedImmediately) handleRouteChange();
+  await loadCatalogue();
+  renderLanding();
+}
+
+async function copyLevelLink(): Promise<void> {
+  syncHash();
+  const url = location.href;
+  if (await writeClipboard(url)) {
+    flashCopyLabel("Copied!");
+    return;
+  }
+  // Clipboard access is denied outside a secure context (and in some embedded
+  // browsers). Rather than a dead button, surface the URL itself, selected, so
+  // Ctrl/Cmd+C still gets the player a shareable link.
+  flashCopyLabel("Copy failed — press Ctrl+C");
+  revealLinkForManualCopy(url);
+}
+
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Older browsers and non-secure origins only have the legacy path.
+    const field = document.createElement("textarea");
+    field.value = text;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(field);
+    return ok;
+  }
+}
+
+function flashCopyLabel(text: string): void {
+  copyLinkBtn.textContent = text;
+  window.setTimeout(() => {
+    copyLinkBtn.textContent = "Copy level link";
+  }, 1500);
+}
+
+let manualLinkEl: HTMLInputElement | null = null;
+
+function revealLinkForManualCopy(url: string): void {
+  if (!manualLinkEl) {
+    manualLinkEl = document.createElement("input");
+    manualLinkEl.className = "manual-link";
+    manualLinkEl.readOnly = true;
+    manualLinkEl.setAttribute("aria-label", "Level link");
+    copyLinkBtn.after(manualLinkEl);
+    manualLinkEl.addEventListener("blur", () => {
+      manualLinkEl?.remove();
+      manualLinkEl = null;
+    });
+  }
+  manualLinkEl.value = url;
+  manualLinkEl.select();
 }
 
 main().catch((err) => {
