@@ -55,13 +55,15 @@
 - [x] WASD as well as arrows, `R` to restart, and keystrokes in the search box no longer reach the game.
 - [x] Level names are stripped of the NUL padding that CC1 `.dat` files carry, so the picker and deep links don't carry a control character.
 
-### Task 8: Styling follows the level-set site
+### Task 8: Styling follows the Tile World application
 
-- [x] Adopt bitbusters.club's own visual language instead of a generic app theme: Roboto Slab (the webfont that site loads from Google Fonts, Apache-2.0), `#212529` body text on white, `#eceff1` panels carrying its two-layer drop shadow (`.card-body`), slate bars top and bottom (`#5e6a75` / `#343a40`, bold sans-serif links, `0 2px 4px rgba(0,0,0,.5)` shadow, red `#a54242` hover), Bootstrap-4 button sizing, and level-set cards in the idiom of its `.banner-item` boxes (2px black frame, `#546e7a` fill, `#eee` ink, `.bottom-description` strip).
-- [x] Tokens are named `--bb-*` after the site's own selectors and cite their source file, with a semantic layer (`--bg`, `--text`, `--surface`, `--bar-bg`, `--accent`, …) that everything else consumes; the dark scheme re-points only that layer.
-- [x] Four values deviate for contrast, each commented where it's defined: link `#007bff`→`#0056b3`, muted `#6c757d`→`#495057` on panels, hover red `#c65353`→`#bd4a4a`, footer text `#6c757d`→`#adb5bd` (the original is 2.45:1 on its own `#343a40` bar).
+- [x] Take the visual language from the Tile World application itself (`Drewroen/tworld`), which is the program this engine ports, instead of a generic app theme or a third-party site: `oshw-qt/TWMainWnd.ui`'s QPalette (window/button `#285080`, light `#3c78c0`, midlight `#3264a0`, dark `#142840` = AlternateBase, base/shadow `#000000`, highlight `#4080c0`), the diagonal `lighter(125)`→`darker(125)` window gradient from `TWMainWnd.cpp`, `res/rc`'s text colours (`#cccccc` / `#ffffff` bold / `#999999` dim), and the app's own UI font `MS Sans Serif` — no webfont is fetched.
+- [x] 2px raised/sunken bevels that invert when pressed, square corners, no drop shadows: level sets are raised buttons, the catalogue is a black base table with `#142840` alternating rows and `#4080c0` selection (its QTableView), the HUD numbers are `QLCDNumber`-style green readouts, and the overlay is dressed as one of its modal dialogs.
+- [x] Tokens are named `--tw-*` after those sources, each citing its file, behind the same semantic layer (`--bg`, `--text`, `--link`, `--selection`, …) so the theme can be swapped again without touching rules.
+- [x] Two values depart from the sources, each commented where it's defined: the LCD digits keep the app's green `#00ff00` but move off the palette's `#e8e8e8` plate onto Base black (~1.2:1 → 15:1), and the clock bar's red — `TWProgressBar` draws par in `#a02020` — marks the last quarter of the time limit, since `GameSetup` carries no par.
+- [x] The clock bar itself is new UI (a `TWProgressBar`-style div under the HUD stats), so it can be dropped without touching anything else.
 
-### Task 7: Tests
+### Task 9: Tests
 
 - [x] `src/routing.test.ts` — valid/invalid routes, round-tripping, percent-encoded ids.
 - [x] `src/sets.test.ts` — snapshot parsing tolerance, ranking, limits, curated exclusion from the browse list.
@@ -69,6 +71,7 @@
 
 ## Verification
 
+- Styling probed on the built site: the body resolves to the `MS Sans Serif` stack at 12px over the `rgb(60,120,192)` → `rgb(20,40,64)` window gradient, panels to black with a sunken `rgb(20,40,64)`/`rgb(60,120,192)` bevel and no border-radius, the primary button to the palette's `rgb(64,128,192)`, the LCD readouts to `rgb(0,255,0)` on black, and `document.fonts` is empty because nothing is fetched. In a level the clock bar's fill fell to 99% as the clock went 201 → 198, and its last-quarter state renders `rgb(160,32,32)` — the red in `TWProgressBar.cpp`. The how-to dialog's paint was confirmed by sampling a capture at the card's centre (`rgb(50,100,160)`, the palette's midlight).
 - `npx tsc --noEmit`, `npm test` (31 tests) and `npm run build` all pass.
 - Browser smoke test against `npm run preview` (headless Chrome): landing renders 7 curated cards + 1,111-set catalogue capped at 40 rows; search filters (`cclp4` → 40 of 50); quick play starts Intro level 1 with the overlay; `#/CC1/ms/3` deep-links to level 3 of 149; ruleset toggle restarts on Lynx and keeps the level in the URL; unknown set ids report "Unknown set"; `history.back()` returns to the level being played; progress state from storage renders as "N levels beaten" and a Continue card.
 - A real win was driven through the UI by replaying an engine-derived solution for Intro level 5 (241 moves, MS rules) as direction runs held long enough that overshoot bumps a wall: the banner shows "You win!", `tworld-completed:…intro.dat:2:5` and a best time are written, and the landing page then shows "1 level beaten" plus a Continue card.

@@ -72,6 +72,8 @@ const levelPasswordEl = document.querySelector<HTMLElement>("#level-password")!;
 const chipsNeededEl = document.querySelector<HTMLElement>("#chips-needed")!;
 const timeLeftEl = document.querySelector<HTMLElement>("#time-left")!;
 const bestTimeEl = document.querySelector<HTMLElement>("#best-time")!;
+const timeBarEl = document.querySelector<HTMLElement>("#time-bar")!;
+const timeBarFillEl = document.querySelector<HTMLElement>("#time-bar-fill")!;
 const statusEl = document.querySelector<HTMLElement>("#status")!;
 const hintPanelEl = document.querySelector<HTMLElement>("#hint-panel")!;
 const setStatusEl = document.querySelector<HTMLElement>("#set-status")!;
@@ -92,6 +94,8 @@ for (const ctx of [...keyIconCtxs, ...bootIconCtxs]) {
 }
 const prevKeysDrawn: (boolean | null)[] = [null, null, null, null];
 const prevBootsDrawn: (boolean | null)[] = [null, null, null, null];
+// The clock bar only needs touching when its whole-number percentage changes.
+let lastBarPercent = -1;
 
 let levels: GameSetup[] = [];
 // Catalogue id of the set whose .dat is currently in `levels` (e.g. "CCLP1"),
@@ -382,6 +386,19 @@ function render(): void {
     ? Math.max(0, Math.ceil((state.timelimit - state.currenttime) / TICKS_PER_SECOND))
     : Infinity;
   timeLeftEl.textContent = state.timelimit ? String(secondsLeft) : "∞";
+  // The clock bar is the app's TWProgressBar: the share of the time limit still
+  // on the clock, turning its pre-par red for the last quarter. A level with no
+  // time limit has nothing to run down, so the bar sits full and green.
+  const remaining = state.timelimit
+    ? Math.max(0, state.timelimit - state.currenttime) / state.timelimit
+    : 1;
+  timeBarEl.classList.toggle("unlimited", !state.timelimit);
+  timeBarEl.classList.toggle("low", Boolean(state.timelimit) && remaining <= 0.25);
+  const percent = Math.round(remaining * 100);
+  if (percent !== lastBarPercent) {
+    timeBarFillEl.style.width = `${percent}%`;
+    lastBarPercent = percent;
+  }
   for (let n = 0; n < 4; n++) {
     const hasKey = Boolean(state.keys[n]);
     if (hasKey !== prevKeysDrawn[n]) {

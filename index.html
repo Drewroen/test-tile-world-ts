@@ -8,10 +8,8 @@
       name="description"
       content="Play Chip's Challenge / Tile World levels in the browser — a demo of tworld-engine, a TypeScript port of the original game logic."
     />
-    <!-- Same webfont the level-set site itself loads (Apache-2.0, so it can be
-         linked rather than bundled). Sans-serif bold is used for the bars, per
-         its navbar.css. -->
-    <link href="https://fonts.googleapis.com/css?family=Roboto+Slab" rel="stylesheet" />
+    <!-- The Tile World app draws its UI in "MS Sans Serif" with its own bitmap
+         face; no webfont is loaded here, so the styling costs no download. -->
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -115,6 +113,10 @@
                 <span class="label">Best</span>
                 <span id="best-time">—</span>
               </div>
+            </div>
+            <!-- The app's TWProgressBar clock: filled by time remaining. -->
+            <div class="time-bar" id="time-bar">
+              <div class="time-bar-fill" id="time-bar-fill"></div>
             </div>
             <div class="panel-row inventory">
               <canvas class="icon-slot" id="key-0" width="24" height="24"></canvas>
