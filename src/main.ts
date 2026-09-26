@@ -408,8 +408,10 @@ function render(): void {
 
 function playButton(setId: string, ruleset: RulesetSlug, label = "Play"): HTMLButtonElement {
   const btn = document.createElement("button");
+  // MS is the default path, so it gets the filled button; Lynx stays a quieter
+  // outline (Bootstrap's own hierarchy, in the site's colors).
+  btn.className = ruleset === "ms" ? "btn btn-primary" : "btn btn-outline-secondary";
   btn.textContent = label;
-  if (ruleset === "ms") btn.className = "primary";
   btn.title = `Play ${setId} with ${ruleset === "ms" ? "MS" : "Lynx"} rules`;
   btn.addEventListener("click", () => {
     location.hash = buildHash(setId, ruleset);
@@ -442,7 +444,7 @@ function renderCurated(): void {
     }
 
     const actions = document.createElement("div");
-    actions.className = "set-actions";
+    actions.className = "curated-actions";
     actions.appendChild(playButton(set.id, "ms"));
     actions.appendChild(playButton(set.id, "lynx", "Lynx"));
     card.appendChild(actions);

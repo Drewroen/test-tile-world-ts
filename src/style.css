@@ -1,52 +1,296 @@
+/* Styling follows the Bit Busters Club site (bitbusters.club) rather than a
+   generic app theme: a white page in Roboto Slab, blue-grey panels carrying
+   that site's two-layer drop shadow, slate bars top and bottom with bold
+   sans-serif links, muted red hover states, and 2px-black-framed "banner"
+   boxes for level sets.
+
+   The values below were read off that site's own stylesheets and computed
+   styles — styles/main.css, navbar.css, links.css, banners.css, footer.css,
+   plus the Bootstrap 4.0.0 build it loads — and keep the site's own selector
+   names (--bb-*) so any value can be traced back to its source. */
+
 :root {
   color-scheme: light dark;
-  font-family: system-ui, sans-serif;
-  --card-border: currentColor;
+
+  /* raw ramp, from bitbusters.club */
+  --bb-body: #212529;        /* Bootstrap body color                      */
+  --bb-muted: #6c757d;       /* footer text / .text-muted (see deviations) */
+  --bb-link: #007bff;        /* Bootstrap default anchor                  */
+  --bb-panel: #eceff1;       /* links.css .card-body                      */
+  --bb-border: #dee2e6;      /* Bootstrap $gray-300                       */
+  --bb-input-border: #ced4da;/* Bootstrap .form-control                   */
+  --bb-slate: #5e6a75;       /* navbar.css #site-navbar                   */
+  --bb-slate-mid: #546e7a;   /* banners.css .banner-item                  */
+  --bb-slate-light: #607d8b; /* banners.css .banner-item a:hover          */
+  --bb-slate-dark: #343a40;  /* navbar.css #shared-navbar, footer.css     */
+  --bb-red: #a54242;         /* navbar.css nav .nav-item.active           */
+  --bb-red-light: #c65353;   /* navbar.css nav .nav-item:hover            */
+  --bb-black: #111;          /* cclp.css .box border                      */
+  --bb-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.16), 0 2px 10px 0 rgba(0, 0, 0, 0.12);
+  --bb-shadow-hover: 0 8px 17px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+  --bb-bar-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  --bb-nav-text-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+
+  /* Three values deviate from the source site, each because the original
+     fails WCAG AA for text at these sizes. Brand fidelity loses to legibility,
+     but an unexplained swap would read as a bug:
+       - link: its #007bff is 3.98:1 on white (~3.5:1 on the panel grey);
+         Bootstrap 4's own link-hover blue #0056b3 is 7.04:1 / 6.10:1.
+       - muted text: its #6c757d is 4.06:1 on the panel grey; gray-700
+         #495057 is 7.08:1 there and 8.18:1 on white.
+       - red hover fills: its #c65353 is 4.41:1 behind white button/nav text
+         (~3.5:1 for 13px bold); #bd4a4a is 4.95:1 and still the "lighter red
+         on hover" the site uses. Its footer's #6c757d on #343a40 is 2.45:1,
+         so footer text uses gray-500 #adb5bd (5.55:1) instead. */
+  --bb-link-legible: #0056b3;
+  --bb-muted-legible: #495057;
+  --bb-red-hover-legible: #bd4a4a;
+  --bb-footer-ink: #adb5bd;
+
+  /* semantic layer — everything else consumes these, not the ramp directly */
+  --bg: #fff;
+  --text: var(--bb-body);
+  --text-muted: var(--bb-muted-legible);
+  --surface: var(--bb-panel);
+  --surface-hover: #e3e7ea;
+  --border: var(--bb-border);
+  --border-strong: var(--bb-black);
+  --link: var(--bb-link-legible);
+  --bar-bg: var(--bb-slate);
+  --bar-bg-dark: var(--bb-slate-dark);
+  --bar-ink: #fff;
+  --bar-hover: var(--bb-red-hover-legible);
+  --accent: var(--bb-red);
+  --accent-hover: var(--bb-red-hover-legible);
+  --accent-ink: #fff;
+  --banner-bg: var(--bb-slate-mid);
+  --banner-ink: #eee;
+  --font-body: "Roboto Slab", Georgia, serif;
+  --font-bar: sans-serif;
+}
+
+/* The reference site is light-only; the demo keeps a dark scheme for anyone
+   whose OS asks for one by re-pointing just this layer. Dark surfaces step
+   *lighter* than the page so panels still read as raised. The red accent pair
+   is left alone: white on #a54242 clears AA on any background. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #212529;
+    --text: #eceff1;
+    --text-muted: var(--bb-footer-ink); /* 7.43:1 on --bg, 5.55:1 on --surface */
+    --surface: #343a40;
+    --surface-hover: #3d444b;
+    --border: #495057;
+    --link: #6ea8fe;
+    --bar-bg: var(--bb-slate-dark);
+    --bar-ink: #eceff1;
+    --banner-bg: #46545c;
+    --banner-ink: #eceff1;
+  }
+}
+
+html {
+  height: 100%;
 }
 
 body {
   margin: 0;
-  padding: 1.5rem;
-  display: flex;
-  justify-content: center;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 11pt; /* main.css */
+  line-height: 1.5;
 }
 
-#app {
-  max-width: 720px;
-  width: 100%;
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 15px;
 }
+
+/* ---- bars ---- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--bar-bg);
+  box-shadow: var(--bb-bar-shadow);
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-bar);
+  font-weight: bold;
+  font-size: 0.9em;
+}
+
+.topbar-brand,
+.topbar-link {
+  color: var(--bar-ink);
+  text-shadow: var(--bb-nav-text-shadow);
+  text-decoration: none;
+}
+
+.topbar-link {
+  padding: 0.25rem 0.5rem;
+}
+
+.topbar-link:hover {
+  background-color: var(--bar-hover);
+  text-decoration: none;
+}
+
+.site-footer {
+  margin-top: 2rem;
+  background: var(--bar-bg-dark);
+  /* footer.css uses #6c757d on this #343a40 bar, which is 2.45:1; gray-500
+     keeps the same muted feel at 5.55:1 (see the deviations note above). */
+  color: var(--bb-footer-ink);
+  padding: 1rem 15px;
+  font-size: 0.8em;
+  text-align: center;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer a {
+  color: var(--bb-footer-ink);
+}
+
+.site-footer a:hover {
+  color: #eceff1;
+}
+
+/* ---- type ---- */
 
 h1 {
-  font-size: 1.4rem;
-  margin-bottom: 0.25rem;
+  font-size: 2.5rem; /* main.css */
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 1.5rem 0 0.5rem;
 }
 
 h2 {
-  font-size: 1.05rem;
-  margin: 1.75rem 0 0.4rem;
+  font-size: 1.75rem;
+  font-weight: 500;
+  margin: 0 0 0.5rem;
 }
 
-.subtitle {
-  opacity: 0.75;
-  margin-top: 0;
-  font-size: 0.9rem;
+h3 {
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+p {
+  margin: 0 0 1rem;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.lead {
+  font-size: 1.05rem;
+  margin-bottom: 1rem;
 }
 
 .muted {
+  color: var(--text-muted);
+  font-size: 0.85em;
   font-weight: normal;
-  opacity: 0.6;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* ---- buttons: Bootstrap 4 sizing, the site's own colors ---- */
+
+.btn {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.5;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
+    border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-outline-secondary {
+  /* Border keeps the site's gray-600; the label uses the darker step because
+     gray-600 on the panel grey is only 4.06:1. Its Bootstrap hover (fill
+     gray-600, white text) stays at 4.69:1, so that's kept as-is. */
+  border-color: var(--bb-muted);
+  color: var(--text-muted);
+}
+
+.btn-outline-secondary:hover {
+  background-color: var(--bb-muted);
+  border-color: var(--bb-muted);
+  color: #fff;
+}
+
+.btn-lg {
+  font-size: 1.05rem;
+  padding: 0.5rem 1.1rem;
+}
+
+.link-btn {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+/* ---- panels ---- */
+
+.card-section {
+  margin-top: 1.5rem;
+}
+
+.panel {
+  background-color: var(--surface);
+  box-shadow: var(--bb-shadow);
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+.section-note {
+  color: var(--text-muted);
   font-size: 0.85rem;
-}
-
-section {
-  margin-bottom: 0.5rem;
-}
-
-/* ---- landing page ---- */
-
-.hero {
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  margin: 0 0 0.75rem;
 }
 
 .hero-actions {
@@ -54,58 +298,16 @@ section {
   align-items: center;
   gap: 0.9rem;
   flex-wrap: wrap;
-  margin-top: 0.9rem;
+  margin-bottom: 1rem;
 }
 
 .hero-note {
   font-size: 0.85rem;
-  opacity: 0.8;
+  color: var(--text-muted);
   flex: 1 1 16rem;
 }
 
-.play-btn {
-  font: inherit;
-  font-size: 1rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid currentColor;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.play-btn:hover {
-  background: color-mix(in srgb, currentColor 12%, transparent);
-}
-
-.play-btn.primary {
-  font-weight: 600;
-  background: currentColor;
-  color: canvas;
-  border-color: currentColor;
-}
-
-.play-btn.primary:hover {
-  opacity: 0.85;
-}
-
-.link-btn {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.section-note {
-  font-size: 0.85rem;
-  opacity: 0.75;
-  margin: 0.25rem 0 0.6rem;
-  line-height: 1.4;
-}
+/* ---- curated sets, in the idiom of banners.css .banner-item ---- */
 
 .curated-list {
   list-style: none;
@@ -113,32 +315,54 @@ section {
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: 0.6rem;
+  gap: 1rem;
 }
 
 .curated-card {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
+  border: 2px solid var(--border-strong);
+  background-color: var(--banner-bg);
+  color: var(--banner-ink);
+  box-shadow: var(--bb-shadow);
+  transition: box-shadow 1s ease;
+}
+
+.curated-card:hover {
+  box-shadow: var(--bb-shadow-hover);
 }
 
 .curated-title {
-  font-weight: 600;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 1.4rem;
+  font-weight: 500;
+  padding: 1.1rem 0.6rem;
+  text-shadow: 2px 5px 6px rgba(0, 0, 0, 0.16), 2px 10px 12px rgba(0, 0, 0, 0.12);
+}
+
+.curated-blurb,
+.curated-progress {
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #ddd;
+  font-size: 0.8em;
+  text-align: center;
+  padding: 0.5em;
 }
 
 .curated-blurb {
-  font-size: 0.8rem;
-  opacity: 0.75;
-  line-height: 1.35;
   flex: 1;
 }
 
-.curated-progress {
-  font-size: 0.78rem;
-  opacity: 0.9;
+.curated-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  padding: 0.6rem 0.5rem;
+  background-color: var(--surface);
 }
 
 .continue-card {
@@ -146,47 +370,51 @@ section {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid currentColor;
-  border-radius: 6px;
   flex-wrap: wrap;
 }
 
 .continue-detail {
-  font-size: 0.85rem;
-  opacity: 0.85;
+  font-size: 0.9rem;
 }
+
+/* ---- search + set rows ---- */
 
 .search-label {
   display: block;
-  font-size: 0.8rem;
-  opacity: 0.7;
+  font-size: 0.85rem;
+  color: var(--text-muted);
   margin-bottom: 0.25rem;
 }
 
-#sets-search {
-  font: inherit;
+.form-control {
+  display: block;
   width: 100%;
   box-sizing: border-box;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid currentColor;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--bg);
+  border: 1px solid var(--bb-input-border);
+  border-radius: 0.25rem;
+  padding: 0.375rem 0.75rem;
 }
 
-/* ---- set list ---- */
+.form-control:focus {
+  outline: 0;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
 
 .set-status {
   font-size: 0.85rem;
-  opacity: 0.75;
-  margin: 0.5rem 0 1rem;
+  color: var(--text-muted);
+  margin: 0.75rem 0 0;
   min-height: 1.2em;
 }
 
 .set-status.error {
   color: #c62828;
-  opacity: 1;
 }
 
 .hidden {
@@ -195,11 +423,10 @@ section {
 
 .sets-list {
   list-style: none;
-  margin: 0.6rem 0 0;
+  margin: 0.75rem 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
 
 .set-row {
@@ -208,8 +435,12 @@ section {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.4rem 0.75rem;
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
+  background-color: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.set-row:hover {
+  background-color: var(--surface-hover);
 }
 
 .set-name {
@@ -219,75 +450,77 @@ section {
 
 .set-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   flex-shrink: 0;
   align-items: center;
 }
 
-.set-actions button {
-  font: inherit;
+.set-actions .btn {
   font-size: 0.85rem;
-  padding: 0.3rem 0.7rem;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
+  padding: 0.2rem 0.5rem;
 }
 
-.set-actions button:hover {
-  background: color-mix(in srgb, currentColor 12%, transparent);
-}
-
-.set-actions button.primary {
-  font-weight: 600;
-  background: currentColor;
-  color: canvas;
-}
-
-.manual-link {
-  font: inherit;
-  font-size: 0.8rem;
-  width: 14rem;
-  max-width: 100%;
-  padding: 0.3rem 0.5rem;
-  border: 1px dashed currentColor;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-}
-
-.site-footer {
-  margin-top: 1.5rem;
-  font-size: 0.78rem;
-  opacity: 0.65;
-  line-height: 1.4;
-}
-
-/* ---- game page ---- */
+/* ---- game page: slate toolbar, as in navbar.css nav.navbar ---- */
 
 .toolbar {
   display: flex;
-  gap: 0.75rem;
   align-items: center;
-  margin: 1rem 0;
+  gap: 0.25rem;
   flex-wrap: wrap;
+  margin: 1rem 0 0;
+  padding: 0.25rem;
+  background-color: var(--bar-bg);
+  box-shadow: var(--bb-bar-shadow);
+  font-family: var(--font-bar);
+  font-weight: bold;
+  font-size: 0.9em;
 }
 
 .toolbar button {
   font: inherit;
-  font-size: 0.85rem;
-  padding: 0.3rem 0.7rem;
-  border: 1px solid currentColor;
-  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  border: 0;
   background: transparent;
-  color: inherit;
+  color: var(--bar-ink);
+  text-shadow: var(--bb-nav-text-shadow);
   cursor: pointer;
 }
 
-.set-name-readout {
-  font-size: 0.85rem;
-  opacity: 0.8;
+.toolbar button:hover {
+  background-color: var(--bar-hover);
+}
+
+.toolbar label,
+.toolbar .set-name-readout {
+  color: var(--bar-ink);
+  text-shadow: var(--bb-nav-text-shadow);
+  padding: 0 0.4rem;
+}
+
+.toolbar select {
+  font: inherit;
+  font-family: var(--font-body);
+  font-weight: normal;
+  max-width: 13rem;
+  color: var(--text);
+  background-color: var(--bg);
+  border: 1px solid var(--bb-input-border);
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.3rem;
+}
+
+.manual-link {
+  font: inherit;
+  font-family: var(--font-body);
+  font-weight: normal;
+  font-size: 0.85em;
+  width: 15rem;
+  max-width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--bb-input-border);
+  border-radius: 0.25rem;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .game-area {
@@ -295,10 +528,11 @@ section {
   gap: 1.5rem;
   align-items: flex-start;
   flex-wrap: wrap;
+  margin-top: 1rem;
 }
 
 canvas {
-  border: 2px solid currentColor;
+  border: 2px solid var(--border-strong);
   image-rendering: pixelated;
   background: #888;
   touch-action: none;
@@ -316,14 +550,14 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  font-weight: bold;
-  border-bottom: 1px solid currentColor;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.4rem;
 }
 
 .password {
   font-weight: normal;
-  opacity: 0.75;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
@@ -339,9 +573,10 @@ canvas {
 }
 
 .stat .label {
-  font-size: 0.75rem;
-  opacity: 0.7;
+  font-size: 0.72rem;
+  color: var(--text-muted);
   text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .inventory {
@@ -352,8 +587,7 @@ canvas {
   width: 24px;
   height: 24px;
   image-rendering: pixelated;
-  border: 1px solid currentColor;
-  border-radius: 3px;
+  border: 1px solid var(--border-strong);
   background: #888;
 }
 
@@ -362,7 +596,6 @@ canvas {
   background: #fff3b0;
   color: #4a3b00;
   border: 1px solid #cbb54a;
-  border-radius: 4px;
   padding: 0.5rem 0.6rem;
   font-size: 0.85rem;
 }
@@ -400,11 +633,12 @@ canvas {
 }
 
 .hint {
-  opacity: 0.7;
+  color: var(--text-muted);
   font-size: 0.8rem;
+  margin: 0;
 }
 
-/* ---- first-run how-to overlay ---- */
+/* ---- first-run overlay ---- */
 
 .overlay {
   position: fixed;
@@ -413,50 +647,40 @@ canvas {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 10;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1020;
 }
 
 .overlay-card {
-  max-width: 30rem;
-  background: canvas;
-  color: canvastext;
-  border: 1px solid currentColor;
-  border-radius: 8px;
-  padding: 1rem 1.25rem 1.25rem;
+  max-width: 32rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--bb-shadow-hover);
+  padding: 1rem 1.35rem 1.35rem;
 }
 
 .overlay-card h2 {
-  margin: 0.25rem 0 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .overlay-card ul {
   margin: 0 0 1rem;
   padding-left: 1.1rem;
   font-size: 0.9rem;
-  line-height: 1.5;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
 @media (max-width: 640px) {
-  body {
-    padding: 0;
+  h1 {
+    font-size: 1.9rem;
+    margin-top: 1rem;
   }
 
-  #app {
-    max-width: 100%;
-  }
-
-  #sets-page {
-    padding: 0.9rem;
-  }
-
-  /* Only the game page's own chrome collapses on phones — the landing page's
-     heading and copy are the whole point of that page, so they stay. */
-  #game-page h1,
-  #game-page .subtitle,
+  /* Only the game page drops its own chrome on phones: the landing page's
+     heading and copy are what that page is for. */
   #game-page .hint {
     display: none;
   }
@@ -464,16 +688,13 @@ canvas {
   .toolbar {
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 1020;
     margin: 0;
-    padding: 0.5rem 0.75rem;
-    background: canvas;
-    border-bottom: 1px solid currentColor;
-    gap: 0.75rem;
+    gap: 0.15rem;
   }
 
   .game-area {
-    padding: 0.75rem;
+    gap: 0.75rem;
   }
 
   canvas#board {
@@ -483,5 +704,9 @@ canvas {
 
   .curated-list {
     grid-template-columns: 1fr;
+  }
+
+  .panel {
+    padding: 0.85rem;
   }
 }

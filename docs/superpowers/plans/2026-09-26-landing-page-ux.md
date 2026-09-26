@@ -55,6 +55,12 @@
 - [x] WASD as well as arrows, `R` to restart, and keystrokes in the search box no longer reach the game.
 - [x] Level names are stripped of the NUL padding that CC1 `.dat` files carry, so the picker and deep links don't carry a control character.
 
+### Task 8: Styling follows the level-set site
+
+- [x] Adopt bitbusters.club's own visual language instead of a generic app theme: Roboto Slab (the webfont that site loads from Google Fonts, Apache-2.0), `#212529` body text on white, `#eceff1` panels carrying its two-layer drop shadow (`.card-body`), slate bars top and bottom (`#5e6a75` / `#343a40`, bold sans-serif links, `0 2px 4px rgba(0,0,0,.5)` shadow, red `#a54242` hover), Bootstrap-4 button sizing, and level-set cards in the idiom of its `.banner-item` boxes (2px black frame, `#546e7a` fill, `#eee` ink, `.bottom-description` strip).
+- [x] Tokens are named `--bb-*` after the site's own selectors and cite their source file, with a semantic layer (`--bg`, `--text`, `--surface`, `--bar-bg`, `--accent`, …) that everything else consumes; the dark scheme re-points only that layer.
+- [x] Four values deviate for contrast, each commented where it's defined: link `#007bff`→`#0056b3`, muted `#6c757d`→`#495057` on panels, hover red `#c65353`→`#bd4a4a`, footer text `#6c757d`→`#adb5bd` (the original is 2.45:1 on its own `#343a40` bar).
+
 ### Task 7: Tests
 
 - [x] `src/routing.test.ts` — valid/invalid routes, round-tripping, percent-encoded ids.

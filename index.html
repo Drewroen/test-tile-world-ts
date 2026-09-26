@@ -8,35 +8,44 @@
       name="description"
       content="Play Chip's Challenge / Tile World levels in the browser — a demo of tworld-engine, a TypeScript port of the original game logic."
     />
+    <!-- Same webfont the level-set site itself loads (Apache-2.0, so it can be
+         linked rather than bundled). Sans-serif bold is used for the bars, per
+         its navbar.css. -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto+Slab" rel="stylesheet" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app">
-      <div id="sets-page">
-        <header class="hero">
-          <h1>Chip's Challenge, in your browser</h1>
-          <p class="subtitle">
-            A playable demo of
-            <a href="https://github.com/Drewroen/tworld-engine">tworld-engine</a> — a
-            TypeScript port of the Tile World (Chip's Challenge) game logic, verified
-            bit-exact against the original C source.
-          </p>
-          <div class="hero-actions">
-            <button id="quick-play-btn" class="play-btn primary">&blacktriangleright; Play</button>
-            <span class="hero-note">
-              Never played? That starts the bundled Intro levels in one click. Or
-              jump into the original 149:
-              <button id="quick-play-cc1-btn" class="link-btn">Play Chip's Challenge 1</button>
-            </span>
-          </div>
-        </header>
+    <header class="topbar">
+      <span class="topbar-brand">Chip's Challenge — tworld-engine demo</span>
+      <a class="topbar-link" href="https://github.com/Drewroen/tworld-engine">Engine source</a>
+    </header>
 
-        <section id="continue-section" class="hidden">
+    <div id="app" class="container">
+      <div id="sets-page">
+        <h1 class="text-center">Chip's Challenge, in your browser</h1>
+        <p class="lead">
+          A playable demo of
+          <a href="https://github.com/Drewroen/tworld-engine">tworld-engine</a> — a
+          TypeScript port of the Tile World (Chip's Challenge) game logic, verified
+          bit-exact against the original C source.
+        </p>
+        <div class="hero-actions">
+          <button id="quick-play-btn" class="btn btn-primary btn-lg">Play</button>
+          <span class="hero-note">
+            Never played? That starts the bundled Intro levels in one click. Or
+            jump into the original 149:
+            <button id="quick-play-cc1-btn" class="link-btn">Play Chip's Challenge 1</button>
+          </span>
+        </div>
+
+        <section id="continue-section" class="card-section hidden">
           <h2>Continue</h2>
-          <div id="continue-card" class="continue-card"></div>
+          <div class="panel">
+            <div id="continue-card" class="continue-card"></div>
+          </div>
         </section>
 
-        <section>
+        <section class="card-section">
           <h2>Classic sets</h2>
           <p class="section-note">
             Every set plays under <strong>MS</strong> rules (the original Microsoft
@@ -47,26 +56,23 @@
           <ul id="curated-list" class="curated-list"></ul>
         </section>
 
-        <section>
+        <section class="card-section">
           <h2>All sets <span id="sets-count" class="muted"></span></h2>
-          <label class="search-label" for="sets-search">Search by name</label>
-          <input
-            id="sets-search"
-            type="search"
-            placeholder="e.g. blobs, CCLP4, icewalls"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <div id="sets-status" class="set-status"></div>
-          <ul id="sets-list" class="sets-list"></ul>
-          <p id="sets-more" class="section-note"></p>
+          <div class="panel">
+            <label class="search-label" for="sets-search">Search by name</label>
+            <input
+              id="sets-search"
+              class="form-control"
+              type="search"
+              placeholder="e.g. blobs, CCLP4, icewalls"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div id="sets-status" class="set-status"></div>
+            <ul id="sets-list" class="sets-list"></ul>
+            <p id="sets-more" class="section-note"></p>
+          </div>
         </section>
-
-        <footer class="site-footer">
-          Level sets are loaded from
-          <a href="https://bitbusters.club/gliderbot/sets/cc1/">bitbusters.club's CC1 mirror</a>
-          — only the small Intro set ships inside this repo.
-        </footer>
       </div>
 
       <div id="game-page" class="hidden">
@@ -91,7 +97,7 @@
 
         <div class="game-area" id="game-area">
           <canvas id="board" width="512" height="512"></canvas>
-          <div class="hud">
+          <div class="hud panel">
             <div class="panel-title">
               <div id="level-name">—</div>
               <div id="level-password" class="password"></div>
@@ -146,11 +152,21 @@
               <li>The clock only starts on your first move, so take your time at the start of a level.</li>
               <li>R restarts the level. Best times are saved in your browser, per level and ruleset.</li>
             </ul>
-            <button id="howto-dismiss" class="play-btn primary">Got it</button>
+            <button id="howto-dismiss" class="btn btn-primary">Got it</button>
           </div>
         </div>
       </div>
     </div>
+
+    <footer class="site-footer">
+      <p>
+        Level sets are loaded from
+        <a href="https://bitbusters.club/gliderbot/sets/cc1/">bitbusters.club's CC1 mirror</a>
+        — only the small Intro set ships inside this repo. Styling follows
+        <a href="https://bitbusters.club/">bitbusters.club</a>.
+      </p>
+    </footer>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
